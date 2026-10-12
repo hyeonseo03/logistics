@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: backend
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/logistics
+    username: postgres
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: update # 개발용: 엔티티에 맞춰 테이블을 자동 생성/수정
+    properties:
+      hibernate:
+        format_sql: true # SQL을 줄바꿈해서 읽기 좋게 출력
+
+logging:
+  level:
+    org.hibernate.SQL: debug # 실행되는 SQL을 로그로 출력
