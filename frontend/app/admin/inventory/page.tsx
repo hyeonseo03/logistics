@@ -7,10 +7,24 @@ import type { InventoryTable } from "@/types/admin";
 export default function AdminInventoryPage() {
   const [table, setTable] = useState<InventoryTable | null>(null);
   const [onlyLowStock, setOnlyLowStock] = useState(false); // 부족 재고만 보기
+  const [error, setError] = useState(false); // 재고 정보를 못 불러왔는지 (예: 백엔드 서버가 꺼져 있음)
 
   useEffect(() => {
-    getInventoryTable().then(setTable);
+    getInventoryTable()
+      .then(setTable)
+      .catch(() => setError(true));
   }, []);
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold">재고 관리</h1>
+        <p className="mt-6 rounded border border-red-200 bg-red-50 p-4 text-red-700">
+          재고 정보를 불러올 수 없습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.
+        </p>
+      </div>
+    );
+  }
 
   if (!table) {
     return <p className="p-8 text-gray-500">불러오는 중...</p>;

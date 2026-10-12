@@ -4,7 +4,6 @@
 
 import { addresses } from "@/mocks/addresses";
 import { categories } from "@/mocks/categories";
-import { inventory } from "@/mocks/inventory";
 import { orderClaims } from "@/mocks/orderClaims";
 import { orderItems } from "@/mocks/orderItems";
 import { orders } from "@/mocks/orders";
@@ -52,7 +51,7 @@ import type {
   User,
   UserRole,
 } from "@/types/user";
-import type { Warehouse } from "@/types/warehouse";
+import type { InventoryResponse, Warehouse } from "@/types/warehouse";
 import { toDateKey } from "@/lib/format";
 import { getShippingFee } from "@/lib/price";
 import { orderStatusLabel, shipmentStatusLabel, shipmentSteps } from "@/lib/labels";
@@ -92,7 +91,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 // 서버에 아예 연결이 안 되면 (서버 꺼짐, 주소 틀림, CORS 차단 등) 화면에 보여줄 한국어 메시지로 Error 를 던진다.
 async function fetchFromServer(path: string): Promise<Response> {
   try {
-    return await fetch(API_URL + path);
+    // cache: "no-store" → 저장해 둔 응답을 쓰지 않고 항상 서버에서 최신 값을 받아온다 (재고는 자주 바뀐다)
+    return await fetch(API_URL + path, { cache: "no-store" });
   } catch {
     throw new Error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.");
   }
@@ -126,23 +126,23 @@ function getDeliveryAddress(): string {
   return address ? address.address : "서울";
 }
 
-// 상품 1개에 카테고리 이름, 물류센터별 재고, 출고 센터, 예상 도착일을 붙인다
-// (백엔드에서는 JOIN + lib/stock.ts 의 계산 규칙으로 처리할 부분)
-function toProductWithStock(product: Product): ProductWithStock {
-  const category = categories.find((c) => c.id === product.categoryId);
-  return addStockInfo(product, category ? category.name : "");
-}
-
-// 상품 1개에 (mock) 재고 정보를 붙인다. 카테고리 이름은 밖에서 받아온다.
-// 백엔드에서 받은 상품도 이 함수로 재고를 붙인다 (재고 API 가 생기기 전까지 임시)
-function addStockInfo(product: Product, categoryName: string): ProductWithStock {
+// 상품 1개에 물류센터별 재고, 출고 센터, 예상 도착일을 붙인다
+// - 재고 합계(totalStock)는 백엔드가 계산해 준 값을 쓰고, 재고 상태는 lib/stock.ts 규칙으로 판단한다
+// - 출고 센터·도착일은 백엔드에서 받은 재고 목록(inventories)과 물류센터 목록(warehouseList)으로 계산한다
+function addStockInfo(
+  product: Product,
+  categoryName: string,
+  totalStock: number,
+  inventories: InventoryResponse[],
+  warehouseList: Warehouse[]
+): ProductWithStock {
   const destinationRegion = getRegionFromAddress(getDeliveryAddress());
 
   // 1. 이 상품을 취급하는 물류센터별 판매가능재고
   const rows: { warehouse: Warehouse; availableQuantity: number }[] = [];
-  for (const row of inventory) {
+  for (const row of inventories) {
     if (row.productId !== product.id) continue;
-    const warehouse = warehouses.find((w) => w.id === row.warehouseId);
+    const warehouse = warehouseList.find((w) => w.id === row.warehouseId);
     if (!warehouse) continue;
     rows.push({
       warehouse,
@@ -162,8 +162,6 @@ function addStockInfo(product: Product, categoryName: string): ProductWithStock 
     warehouseName: row.warehouse.name,
     availableQuantity: row.availableQuantity,
   }));
-  const totalStock = stocks.reduce((sum, stock) => sum + stock.availableQuantity, 0);
-
   // 3. 출고 센터 = 가까운 순서대로 봤을 때 처음으로 재고가 있는 센터
   const shippingRow = rows.find((row) => row.availableQuantity > 0);
 
@@ -233,9 +231,13 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 // 백엔드 상품 응답을 화면용 ProductWithStock 으로 바꾼다
-// - 상품 정보(이름, 가격, 카테고리 이름 등)는 백엔드 값을 쓴다
-// - 재고·출고 센터·도착일은 아직 백엔드에 없어서 mock 재고(mocks/inventory.ts)를 상품 id 로 찾아 붙인다
-function fromProductResponse(response: ProductResponse): ProductWithStock {
+// - 상품 정보(이름, 가격, 카테고리 이름, 재고 합계)는 백엔드 값을 쓴다
+// - 출고 센터·도착일은 백엔드 재고 목록 + 물류센터 목록으로 계산한다
+function fromProductResponse(
+  response: ProductResponse,
+  inventories: InventoryResponse[],
+  warehouseList: Warehouse[]
+): ProductWithStock {
   // 백엔드는 createdAt 을 시간대 없이 보낸다 ("2026-08-05T09:00:00").
   // mock 데이터와 같은 모양이 되도록 한국 시간(+09:00)을 붙인다. 이미 시간대가 있으면 그대로 둔다.
   const hasTimeZone = response.createdAt.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(response.createdAt);
@@ -251,7 +253,7 @@ function fromProductResponse(response: ProductResponse): ProductWithStock {
     imageUrl: response.imageUrl,
     createdAt,
   };
-  return addStockInfo(product, response.categoryName);
+  return addStockInfo(product, response.categoryName, response.totalStock, inventories, warehouseList);
 }
 
 // [백엔드 연결됨] GET /api/products?categoryId=...
@@ -259,8 +261,13 @@ function fromProductResponse(response: ProductResponse): ProductWithStock {
 // 검색어(keyword)와 정렬(sort)은 백엔드에 생길 때까지 여기서 처리한다.
 export async function getProducts(params: ProductSearchParams = {}): Promise<ProductWithStock[]> {
   const path = params.categoryId ? `/api/products?categoryId=${params.categoryId}` : "/api/products";
-  const responses = await apiGet<ProductResponse[]>(path);
-  let result = responses.map(fromProductResponse);
+  // 상품, 재고, 물류센터를 동시에 요청하고 셋 다 도착할 때까지 기다린다
+  const [responses, inventories, warehouseList] = await Promise.all([
+    apiGet<ProductResponse[]>(path),
+    getInventories(),
+    getWarehouses(),
+  ]);
+  let result = responses.map((response) => fromProductResponse(response, inventories, warehouseList));
 
   // 검색어: 상품 이름에 포함되어 있는지
   const keyword = params.keyword?.trim();
@@ -289,15 +296,37 @@ export async function getProduct(id: number): Promise<ProductWithStock | null> {
     throw new Error(`서버 오류가 발생했습니다. (${response.status})`);
   }
   const data: ProductResponse = await response.json();
-  return fromProductResponse(data);
+
+  const [inventories, warehouseList] = await Promise.all([getProductInventories(id), getWarehouses()]);
+  return fromProductResponse(data, inventories, warehouseList);
 }
 
-// 나중에: GET /api/products?ids=1,2,3
+// [백엔드 연결됨] GET /api/products 전체를 받아서 ids 에 있는 상품만 고른다
+// (나중에 백엔드에 GET /api/products?ids=1,2,3 이 생기면 바꾼다)
 // 장바구니 화면용: 담긴 상품들의 최신 재고·출고 센터·도착일·이미지를 한 번에 가져온다
 // 없는(삭제된) 상품은 결과에서 빠진다
 export async function getProductsByIds(ids: number[]): Promise<ProductWithStock[]> {
-  await delay();
-  return products.filter((p) => ids.includes(p.id)).map(toProductWithStock);
+  const all = await getProducts();
+  return all.filter((p) => ids.includes(p.id));
+}
+
+// ───────── 물류센터 / 재고 ─────────
+
+// [백엔드 연결됨] GET /api/warehouses
+export async function getWarehouses(): Promise<Warehouse[]> {
+  return apiGet<Warehouse[]>("/api/warehouses");
+}
+
+// [백엔드 연결됨] GET /api/inventories
+// 모든 상품 × 물류센터의 재고 목록 (관리자 재고 화면, 상품 목록의 출고 센터 계산에 쓴다)
+export async function getInventories(): Promise<InventoryResponse[]> {
+  return apiGet<InventoryResponse[]>("/api/inventories");
+}
+
+// [백엔드 연결됨] GET /api/products/{id}/inventories
+// 상품 1개의 물류센터별 재고 목록 (없는 상품이면 서버가 404 → Error)
+export async function getProductInventories(productId: number): Promise<InventoryResponse[]> {
+  return apiGet<InventoryResponse[]>(`/api/products/${productId}/inventories`);
 }
 
 // 나중에: POST /api/products/{id}/restock-alerts
@@ -337,15 +366,16 @@ export async function createOrder(request: CreateOrderRequest): Promise<Order> {
   }
 
   // 1. 상품 확인 + 재고 확인 + 총 금액 계산 (가격은 화면이 아니라 여기서 계산한다)
+  // 상품 정보와 재고는 백엔드에서 최신 값을 받아온다
+  const orderedProducts = await getProductsByIds(request.items.map((item) => item.productId));
   let totalPrice = 0;
   for (const item of request.items) {
-    const product = products.find((p) => p.id === item.productId);
+    const product = orderedProducts.find((p) => p.id === item.productId);
     if (!product) {
       throw new Error("존재하지 않는 상품이 있습니다.");
     }
-    const { totalStock } = toProductWithStock(product);
-    if (item.quantity > totalStock) {
-      throw new Error(`${product.name}의 재고가 부족합니다. (남은 수량: ${totalStock}개)`);
+    if (item.quantity > product.totalStock) {
+      throw new Error(`${product.name}의 재고가 부족합니다. (남은 수량: ${product.totalStock}개)`);
     }
     totalPrice += product.price * item.quantity;
   }
@@ -370,7 +400,7 @@ export async function createOrder(request: CreateOrderRequest): Promise<Order> {
 
   // 3. order_items
   for (const item of request.items) {
-    const product = products.find((p) => p.id === item.productId)!;
+    const product = orderedProducts.find((p) => p.id === item.productId)!;
     orderItems.push({
       id: nextId(orderItems),
       orderId: order.id,
@@ -381,9 +411,7 @@ export async function createOrder(request: CreateOrderRequest): Promise<Order> {
   }
 
   // 4. shipments: 첫 번째 상품의 출고 센터(배송지에서 가장 가까운 재고 있는 센터)에서 출고한다 (단순화한 규칙)
-  const firstProduct = toProductWithStock(
-    products.find((p) => p.id === request.items[0].productId)!
-  );
+  const firstProduct = orderedProducts.find((p) => p.id === request.items[0].productId)!;
   const shippingWarehouse = firstProduct.shippingWarehouse!; // 위에서 재고를 확인했으므로 항상 있다
   const warehouseId = shippingWarehouse.warehouseId;
   const shipmentId = nextId(shipments);
@@ -491,12 +519,15 @@ export async function getMyRestockAlerts(): Promise<RestockAlertWithProduct[]> {
   await delay();
   const user = requireLogin();
 
+  // 상품의 현재 재고 상태는 백엔드에서 받아온다
+  const myAlerts = restockAlerts.filter((a) => a.userId === user.id);
+  const alertProducts = await getProductsByIds(myAlerts.map((a) => a.productId));
+
   const result: RestockAlertWithProduct[] = [];
-  for (const alert of restockAlerts) {
-    if (alert.userId !== user.id) continue;
-    const product = products.find((p) => p.id === alert.productId);
+  for (const alert of myAlerts) {
+    const product = alertProducts.find((p) => p.id === alert.productId);
     if (!product) continue;
-    result.push({ ...alert, product: toProductWithStock(product) });
+    result.push({ ...alert, product });
   }
   return result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -749,10 +780,19 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     dailyOrders.push({ date: key, count });
   }
 
+  // 재고 부족 건수는 백엔드 재고 목록으로 센다. 서버에 연결할 수 없으면 null (화면에서 안내 문구 표시)
+  let lowStockCount: number | null = null;
+  try {
+    const inventories = await getInventories();
+    lowStockCount = inventories.filter((row) => row.quantity < LOW_STOCK_THRESHOLD).length;
+  } catch {
+    lowStockCount = null;
+  }
+
   return {
     totalOrders: orders.length,
     shippingCount: shipments.filter((s) => s.status === "SHIPPED" || s.status === "IN_TRANSIT").length,
-    lowStockCount: inventory.filter((row) => row.quantity < LOW_STOCK_THRESHOLD).length,
+    lowStockCount,
     delayedCount: shipments.filter(isDelayed).length,
     dailyOrders,
   };
@@ -802,14 +842,20 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus): P
   return order;
 }
 
-// 나중에: GET /api/admin/inventory
+// [백엔드 연결됨] GET /api/products + GET /api/warehouses + GET /api/inventories 를 합쳐서 표를 만든다
+// 서버에 연결할 수 없으면 Error 를 던진다
 export async function getInventoryTable(): Promise<InventoryTable> {
-  await delay();
   requireAdmin();
 
-  const rows: InventoryRow[] = products.map((product) => {
-    const cells: InventoryCell[] = warehouses.map((warehouse) => {
-      const row = inventory.find(
+  const [productList, warehouseList, inventories] = await Promise.all([
+    apiGet<ProductResponse[]>("/api/products"),
+    getWarehouses(),
+    getInventories(),
+  ]);
+
+  const rows: InventoryRow[] = productList.map((product) => {
+    const cells: InventoryCell[] = warehouseList.map((warehouse) => {
+      const row = inventories.find(
         (r) => r.productId === product.id && r.warehouseId === warehouse.id
       );
       // 이 물류센터에서 취급하지 않는 상품
@@ -825,13 +871,13 @@ export async function getInventoryTable(): Promise<InventoryTable> {
     return {
       productId: product.id,
       productName: product.name,
-      categoryName: categories.find((c) => c.id === product.categoryId)?.name ?? "",
+      categoryName: product.categoryName,
       cells,
       totalQuantity: cells.reduce((sum, cell) => sum + (cell.quantity ?? 0), 0),
     };
   });
 
-  return { warehouses, rows, lowStockThreshold: LOW_STOCK_THRESHOLD };
+  return { warehouses: warehouseList, rows, lowStockThreshold: LOW_STOCK_THRESHOLD };
 }
 
 // 나중에: GET /api/admin/shipments?status=...

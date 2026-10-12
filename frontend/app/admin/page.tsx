@@ -27,7 +27,13 @@ export default function AdminDashboardPage() {
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryCard label="전체 주문" value={summary.totalOrders} unit="건" />
         <SummaryCard label="배송중" value={summary.shippingCount} unit="건" />
-        <SummaryCard label="재고 부족" value={summary.lowStockCount} unit="건" warning />
+        <SummaryCard
+          label="재고 부족"
+          value={summary.lowStockCount}
+          unit="건"
+          warning
+          errorText="재고 정보를 불러올 수 없습니다"
+        />
         <SummaryCard label="지연 배송" value={summary.delayedCount} unit="건" warning />
       </div>
 

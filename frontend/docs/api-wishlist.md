@@ -27,15 +27,15 @@
 
 ### API
 
-> **연결 상태**: 아래 두 API(`GET /api/products`, `GET /api/products/{id}`)는 프론트에서 **실제 백엔드를 호출**한다 (`lib/api.ts`).
+> **연결 상태**: 상품 API(`GET /api/products`, `GET /api/products/{id}`)와 물류센터·재고 API(`GET /api/warehouses`, `GET /api/inventories`, `GET /api/products/{id}/inventories`)는 프론트에서 **실제 백엔드를 호출**한다 (`lib/api.ts`).
 > - 백엔드 주소: `.env.local` 의 `NEXT_PUBLIC_API_URL` (기본 `http://localhost:8080`)
-> - 지금 백엔드 응답은 `ProductResponse` (`types/product.ts`): 상품 필드 + `categoryName`. 상품이 없으면 404.
+> - 지금 백엔드 응답은 `ProductResponse` (`types/product.ts`): 상품 필드 + `categoryName` + `totalStock`. 상품이 없으면 404. 재고는 `InventoryResponse` (`types/warehouse.ts`).
 > - **임시 처리 (프론트에서 하는 것, 백엔드에 생기면 지울 것)**
->   - 재고 배지·당일 출고·예상 도착일: mock 재고(`mocks/inventory.ts`)를 상품 id 로 찾아 붙인다 → 백엔드에 재고 필드 추가 필요
+>   - 출고 센터·당일 출고·예상 도착일: 백엔드 재고 목록 + 물류센터 목록으로 프론트(`lib/stock.ts` 규칙)에서 계산한다 → 나중에 백엔드로 옮길 수 있음
 >   - 검색어(`keyword`)·정렬(`sort`): 백엔드가 아직 `categoryId` 만 받아서 프론트에서 거른다 → 쿼리 파라미터 추가 필요
 >   - `createdAt` 이 시간대 없이 와서 프론트에서 `+09:00` 을 붙인다 → 백엔드에서 `OffsetDateTime` 등으로 시간대 포함 권장
 > - CORS: 백엔드 `WebConfig.java` 에서 `http://localhost:3000` 허용됨
-> - 나머지 API(카테고리, 장바구니용 `?ids=`, 주문, 배송 등)는 아직 mock
+> - 나머지 API(카테고리, 장바구니용 `?ids=`, 주문, 배송 등)는 아직 mock. 장바구니는 `GET /api/products` 전체를 받아 프론트에서 고른다
 
 #### `GET /api/products?keyword=&categoryId=&sort=` (기존 API에 필드 추가)
 #### `GET /api/products/{id}` (기존 API에 필드 추가)

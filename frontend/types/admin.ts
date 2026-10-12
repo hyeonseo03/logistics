@@ -15,7 +15,7 @@ export interface DailyOrderCount {
 export interface DashboardSummary {
   totalOrders: number; // 전체 주문 수
   shippingCount: number; // 배송중(출고 + 운송중) 건수
-  lowStockCount: number; // 재고 부족 (물류센터별 재고 행 기준)
+  lowStockCount: number | null; // 재고 부족 (물류센터별 재고 행 기준). 재고 정보를 불러오지 못하면 null
   delayedCount: number; // 지연 배송 건수
   dailyOrders: DailyOrderCount[]; // 최근 7일 (오래된 날짜부터)
 }
@@ -41,7 +41,7 @@ export interface InventoryRow {
   totalQuantity: number;
 }
 
-// 재고 현황 표 전체 (나중에 GET /api/admin/inventory)
+// 재고 현황 표 전체 (GET /api/products + /api/warehouses + /api/inventories 를 합친 것)
 export interface InventoryTable {
   warehouses: Warehouse[];
   rows: InventoryRow[];

@@ -20,6 +20,7 @@ export default function CartPage() {
     syncStock,
   } = useCart();
   const [products, setProducts] = useState<ProductWithStock[]>([]); // 담긴 상품들의 최신 정보
+  const [stockError, setStockError] = useState(false); // 최신 재고를 못 불러왔는지 (예: 백엔드 서버가 꺼져 있음)
 
   // 담긴 상품 목록(id)이 바뀔 때마다 최신 재고·도착 예정일을 불러온다
   // (수량만 바뀔 때는 다시 부르지 않도록 id 들을 문자열로 묶어서 비교한다)
@@ -29,11 +30,16 @@ export default function CartPage() {
     if (idsKey === "") return;
     let ignore = false;
 
-    getProductsByIds(idsKey.split(",").map(Number)).then((data) => {
-      if (ignore) return;
-      setProducts(data);
-      syncStock(data.map((p) => ({ productId: p.id, stock: p.totalStock })));
-    });
+    getProductsByIds(idsKey.split(",").map(Number))
+      .then((data) => {
+        if (ignore) return;
+        setProducts(data);
+        setStockError(false);
+        syncStock(data.map((p) => ({ productId: p.id, stock: p.totalStock })));
+      })
+      .catch(() => {
+        if (!ignore) setStockError(true);
+      });
 
     return () => {
       ignore = true;
@@ -53,6 +59,12 @@ export default function CartPage() {
   return (
     <div className="p-4 sm:p-8">
       <h1 className="text-2xl font-bold">장바구니</h1>
+
+      {stockError && (
+        <p className="mt-4 rounded border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+          재고 정보를 불러올 수 없습니다. 담은 상품의 재고·도착 예정일이 최신이 아닐 수 있어요.
+        </p>
+      )}
 
       {/* 모바일: 목록 아래에 결제 요약 / 큰 화면: 오른쪽에 결제 요약 */}
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">

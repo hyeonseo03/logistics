@@ -17,10 +17,11 @@ export interface Product {
 }
 
 // 백엔드 GET /api/products, GET /api/products/{id} 의 응답 (백엔드 ProductResponse.java 와 같은 모양)
-// products 테이블 + categoryName. 재고 정보는 아직 없다.
+// products 테이블 + categoryName + totalStock
 // 주의: createdAt 은 시간대 없이 온다 (예: "2026-08-05T09:00:00", 한국 시간)
 export interface ProductResponse extends Product {
   categoryName: string;
+  totalStock: number; // 모든 물류센터의 판매가능재고 합계 (재고 상태 판단은 lib/stock.ts 가 한다)
 }
 
 // 재고 상태 (판매가능재고 기준)

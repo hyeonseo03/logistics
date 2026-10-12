@@ -14,12 +14,18 @@ export default function RestockAlertList() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<number | null>(null); // 해제 중인 알림
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState(false); // 상품 재고 정보를 못 불러왔는지 (예: 백엔드 서버가 꺼져 있음)
 
   useEffect(() => {
-    getMyRestockAlerts().then((data) => {
-      setAlerts(data);
-      setLoading(false);
-    });
+    getMyRestockAlerts()
+      .then((data) => {
+        setAlerts(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoadError(true);
+        setLoading(false);
+      });
   }, []);
 
   async function handleDelete(alertId: number) {
@@ -35,6 +41,14 @@ export default function RestockAlertList() {
   }
 
   if (loading) return <p className="text-gray-500">불러오는 중...</p>;
+
+  if (loadError) {
+    return (
+      <p className="rounded border border-red-200 bg-red-50 p-4 text-red-700">
+        재고 정보를 불러올 수 없습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.
+      </p>
+    );
+  }
 
   if (alerts.length === 0) {
     return (
