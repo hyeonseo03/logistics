@@ -26,9 +26,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestFixtures.class)
 class OrderFlowTest {
 
-    static final String ORDER_BODY = "{\"receiverName\":\"홍길동\",\"receiverPhone\":\"010-1111-2222\","
-            + "\"address\":\"서울시 강남구 테헤란로 1\",\"paymentMethod\":\"CARD\"}";
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -45,7 +42,7 @@ class OrderFlowTest {
         addToCart(token, product, 2);
 
         mockMvc.perform(post("/api/orders").header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON).content(ORDER_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(TestFixtures.ORDER_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("ORDERED"))
                 .andExpect(jsonPath("$.paymentStatus").value("PAID"))
@@ -67,7 +64,7 @@ class OrderFlowTest {
 
         // 장바구니가 비었으면 400
         mockMvc.perform(post("/api/orders").header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON).content(ORDER_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(TestFixtures.ORDER_BODY))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CART_EMPTY"));
     }
@@ -84,7 +81,7 @@ class OrderFlowTest {
         fixtures.setQuantity(second, 0);
 
         mockMvc.perform(post("/api/orders").header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON).content(ORDER_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(TestFixtures.ORDER_BODY))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("OUT_OF_STOCK"));
 
@@ -104,7 +101,7 @@ class OrderFlowTest {
         addToCart(owner, product, 1);
 
         String body = mockMvc.perform(post("/api/orders").header("Authorization", "Bearer " + owner)
-                        .contentType(MediaType.APPLICATION_JSON).content(ORDER_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(TestFixtures.ORDER_BODY))
                 .andExpect(jsonPath("$.shippingFee").value(0)) // 30,000원 이상 무료배송
                 .andReturn().getResponse().getContentAsString();
         int orderId = com.jayway.jsonpath.JsonPath.read(body, "$.id");

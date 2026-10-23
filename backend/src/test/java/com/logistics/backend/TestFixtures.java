@@ -19,6 +19,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TestFixtures {
 
+    // 직접 입력 배송지로 주문하는 요청 본문 (서울 → 서울 물류센터에서 출고)
+    public static final String ORDER_BODY = "{\"receiverName\":\"홍길동\",\"receiverPhone\":\"010-1111-2222\","
+            + "\"address\":\"서울시 강남구 테헤란로 1\",\"paymentMethod\":\"CARD\"}";
+
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final WarehouseRepository warehouseRepository;

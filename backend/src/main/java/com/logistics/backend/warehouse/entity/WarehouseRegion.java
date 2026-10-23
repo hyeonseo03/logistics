@@ -1,13 +1,20 @@
 package com.logistics.backend.warehouse.entity;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
 import java.util.List;
 import java.util.Map;
 
 // 프론트 types/warehouse.ts 의 WarehouseRegion 과 같은 값
+@Getter
+@RequiredArgsConstructor
 public enum WarehouseRegion {
-    SEOUL,
-    GYEONGGI,
-    BUSAN;
+    SEOUL("서울"),
+    GYEONGGI("경기"),
+    BUSAN("부산");
+
+    private final String label;
 
     // 배송지 지역별로 가까운 물류센터 지역 순서 (프론트 lib/stock.ts 와 같은 규칙)
     private static final Map<WarehouseRegion, List<WarehouseRegion>> NEAREST_REGIONS = Map.of(

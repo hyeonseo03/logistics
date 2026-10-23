@@ -159,7 +159,7 @@ class OrderRevertTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"productId\":" + product.getId() + ",\"quantity\":" + quantity + "}"));
         String body = mockMvc.perform(post("/api/orders").header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON).content(OrderFlowTest.ORDER_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(TestFixtures.ORDER_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.cancelInfo.type").value("IMMEDIATE_CANCEL"))
                 .andReturn().getResponse().getContentAsString();

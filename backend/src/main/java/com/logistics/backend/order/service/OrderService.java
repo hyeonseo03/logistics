@@ -21,6 +21,7 @@ import com.logistics.backend.order.repository.OrderRepository;
 import com.logistics.backend.order.repository.OrderStatusHistoryRepository;
 import com.logistics.backend.order.repository.PaymentRepository;
 import com.logistics.backend.product.entity.Product;
+import com.logistics.backend.shipment.service.ShipmentService;
 import com.logistics.backend.user.entity.User;
 import com.logistics.backend.user.entity.UserAddress;
 import com.logistics.backend.user.repository.UserRepository;
@@ -53,12 +54,13 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final OrderResponseAssembler assembler;
     private final OrderTransitionService transitionService;
+    private final ShipmentService shipmentService;
 
     // 장바구니 → 주문
     // 아래 작업이 모두 하나의 트랜잭션이다. 중간에 하나라도 실패하면(예: 두 번째 상품 재고 부족)
     // 앞에서 한 재고 예약까지 전부 취소(롤백)되어, "주문은 없는데 재고만 줄어든" 상태가 생기지 않는다
     //  1) 배송지 정하기  2) 상품마다 출고 센터를 골라 재고 예약  3) 주문·주문상품 저장
-    //  4) 모의 결제(결제완료) 기록  5) 상태 이력 기록  6) 주문한 상품을 장바구니에서 삭제
+    //  4) 모의 결제(결제완료) 기록  5) 상태 이력·배송(shipments) 생성  6) 주문한 상품을 장바구니에서 삭제
     @Transactional
     public OrderResponse createOrder(Long userId, CreateOrderRequest request) {
         User user = userRepository.findById(userId)
@@ -84,6 +86,7 @@ public class OrderService {
 
         paymentRepository.save(new Payment(order, request.paymentMethod(), order.getTotalPrice(), now));
         historyRepository.save(new OrderStatusHistory(order, null, OrderStatus.ORDERED, userId, now));
+        shipmentService.createFor(order, now);
 
         List<Long> orderedProductIds = cartItems.stream().map(item -> item.getProduct().getId()).toList();
         cartItemRepository.deleteByUserIdAndProductIds(userId, orderedProductIds);

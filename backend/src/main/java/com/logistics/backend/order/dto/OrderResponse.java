@@ -4,6 +4,7 @@ import com.logistics.backend.order.entity.Order;
 import com.logistics.backend.order.entity.OrderStatus;
 import com.logistics.backend.order.entity.PaymentMethod;
 import com.logistics.backend.order.entity.PaymentStatus;
+import com.logistics.backend.shipment.dto.ShipmentResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,10 +25,11 @@ public record OrderResponse(
         String address,
         LocalDateTime createdAt,
         List<OrderItemResponse> items,
+        ShipmentResponse shipment, // 배송 정보 (프론트 OrderWithDetails.shipment)
         CancelInfo cancelInfo     // 지금 취소하면 어떻게 되는지 (즉시취소 / 회수 / 이미 처리됨)
 ) {
 
-    public static OrderResponse of(Order order, PaymentStatus paymentStatus) {
+    public static OrderResponse of(Order order, PaymentStatus paymentStatus, ShipmentResponse shipment) {
         return new OrderResponse(
                 order.getId(),
                 order.getUser().getId(),
@@ -43,6 +45,7 @@ public record OrderResponse(
                 order.getAddress(),
                 order.getCreatedAt(),
                 order.getItems().stream().map(OrderItemResponse::from).toList(),
+                shipment,
                 CancelInfo.from(order.getStatus())
         );
     }

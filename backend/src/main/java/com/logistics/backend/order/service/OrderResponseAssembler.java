@@ -5,6 +5,8 @@ import com.logistics.backend.order.entity.Order;
 import com.logistics.backend.order.entity.Payment;
 import com.logistics.backend.order.entity.PaymentStatus;
 import com.logistics.backend.order.repository.PaymentRepository;
+import com.logistics.backend.shipment.dto.ShipmentResponse;
+import com.logistics.backend.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -13,13 +15,14 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 // 주문 엔티티 여러 개 → 응답 DTO 로 바꾼다.
-// 주문마다 결제 정보를 따로 조회하지 않고(N+1 방지) 한 번에 모아서 붙인다.
+// 주문마다 결제·배송 정보를 따로 조회하지 않고(N+1 방지) 한 번에 모아서 붙인다.
 // 고객 주문 API 와 관리자 주문 API 가 같이 쓴다
 @Component
 @RequiredArgsConstructor
 public class OrderResponseAssembler {
 
     private final PaymentRepository paymentRepository;
+    private final ShipmentRepository shipmentRepository;
 
     public List<OrderResponse> toResponses(List<Order> orders) {
         if (orders.isEmpty()) {
@@ -30,8 +33,13 @@ public class OrderResponseAssembler {
         Map<Long, PaymentStatus> paymentStatusByOrderId = paymentRepository.findAllByOrderIdIn(orderIds).stream()
                 .collect(Collectors.toMap(p -> p.getOrder().getId(), Payment::getStatus));
 
+        Map<Long, ShipmentResponse> shipmentByOrderId = shipmentRepository.findAllWithWarehouseByOrderIdIn(orderIds).stream()
+                .collect(Collectors.toMap(s -> s.getOrder().getId(), ShipmentResponse::from));
+
         return orders.stream()
-                .map(order -> OrderResponse.of(order, paymentStatusByOrderId.get(order.getId())))
+                .map(order -> OrderResponse.of(order,
+                        paymentStatusByOrderId.get(order.getId()),
+                        shipmentByOrderId.get(order.getId())))
                 .toList();
     }
 

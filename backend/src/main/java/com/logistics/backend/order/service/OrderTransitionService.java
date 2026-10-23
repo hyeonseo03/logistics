@@ -12,6 +12,7 @@ import com.logistics.backend.order.repository.OrderRepository;
 import com.logistics.backend.order.repository.OrderReturnRepository;
 import com.logistics.backend.order.repository.OrderStatusHistoryRepository;
 import com.logistics.backend.order.repository.PaymentRepository;
+import com.logistics.backend.shipment.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +26,7 @@ import java.time.LocalDateTime;
 //   → SHIPPED   : 실물재고 차감 (예약 → 실제 출고)
 //   → RETURNING : 회수(returns) 생성
 //   → RETURNED  : 실물재고 복구 + 회수 완료 + 환불
-//   모든 변경   : 상태 이력(order_status_history) 기록
+//   모든 변경   : 상태 이력(order_status_history) + 배송 이력(shipment_events) 자동 기록
 @Service
 @RequiredArgsConstructor
 public class OrderTransitionService {
@@ -35,6 +36,7 @@ public class OrderTransitionService {
     private final OrderReturnRepository returnRepository;
     private final PaymentRepository paymentRepository;
     private final InventoryService inventoryService;
+    private final ShipmentService shipmentService;
 
     // 주문 id 로 상태 변경 (관리자 상태 변경 API 에서 사용)
     @Transactional
@@ -82,6 +84,7 @@ public class OrderTransitionService {
         }
 
         historyRepository.save(new OrderStatusHistory(order, previous, next, changedBy, now));
+        shipmentService.recordStatusChange(order, next, now);
     }
 
     private void refund(Order order, String reason, LocalDateTime now) {
