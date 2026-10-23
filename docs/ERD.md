@@ -12,6 +12,8 @@ erDiagram
     products ||--o{ inventories : "센터별 재고"
     warehouses ||--o{ inventories : ""
     products ||--o{ cart_items : ""
+    users ||--o{ restock_alerts : "재입고 알림"
+    products ||--o{ restock_alerts : ""
 
     orders ||--|{ order_items : "주문 상품"
     products ||--o{ order_items : ""
@@ -76,6 +78,12 @@ erDiagram
         bigint user_id FK "UK(user_id, product_id)"
         bigint product_id FK
         int quantity
+        timestamp created_at
+    }
+    restock_alerts {
+        bigint id PK
+        bigint user_id FK "UK(user_id, product_id)"
+        bigint product_id FK
         timestamp created_at
     }
     orders {
@@ -153,10 +161,11 @@ erDiagram
 |---|---|---|
 | `users` | 회원 | `email` 유니크, 비밀번호는 BCrypt 해시 |
 | `user_addresses` | 회원 배송지 | 회원당 기본 배송지 1개 |
-| `categories`, `products` | 상품 | |
+| `categories`, `products` | 상품 | `image_url`: 관리자가 올린 사진이면 `/uploads/products/...` (파일은 `backend/uploads/`) |
 | `warehouses` | 물류센터 | 서울·경기·부산 |
 | `inventories` | 센터별 재고 | `(product_id, warehouse_id)` 유니크. 판매가능재고 = `quantity - reserved_quantity` |
 | `cart_items` | 장바구니 | `(user_id, product_id)` 유니크 |
+| `restock_alerts` | 재입고 알림 신청 | `(user_id, product_id)` 유니크. 상품 삭제 시 함께 삭제 |
 | `orders` | 주문 | 배송지는 주문 시점 값을 복사. `version` 으로 동시 수정 충돌 감지 |
 | `order_items` | 주문 상품 | 상품마다 출고 센터(`warehouse_id`)를 저장 |
 | `order_status_history` | 상태 변경 이력 | 누가 언제 무엇에서 무엇으로 |

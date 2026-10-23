@@ -102,9 +102,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
 
   if (!response.ok) {
-    // 토큰이 만료되었거나 잘못되었으면 지운다 (다음 화면부터 로그인 안 한 상태가 된다)
-    if (response.status === 401 && token) clearToken();
-
     let code = `HTTP_${response.status}`;
     let message = `서버 오류가 발생했습니다. (${response.status})`;
     try {
@@ -114,6 +111,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     } catch {
       // 본문이 JSON 이 아니면 기본 메시지를 쓴다
     }
+
+    // 토큰이 만료되었거나 잘못되었으면 지운다 (다음 화면부터 로그인 안 한 상태가 된다)
+    // 같은 401 이라도 "비밀번호가 틀림"(WRONG_PASSWORD, LOGIN_FAILED)은 로그인 상태와 관계없으므로 지우지 않는다
+    if (code === "INVALID_TOKEN") clearToken();
+
     throw new ApiError(response.status, code, message);
   }
 
