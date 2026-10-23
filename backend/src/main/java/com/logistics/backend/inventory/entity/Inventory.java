@@ -58,6 +58,16 @@ public class Inventory {
         this.reservedQuantity = reservedQuantity;
     }
 
+    // 판매가능재고 = 현재재고 - 예약재고 (음수면 0)
+    public int getAvailableQuantity() {
+        return Math.max(0, quantity - reservedQuantity);
+    }
+
+    // 관리자 재고 조정 (현재재고를 이 값으로 바꾼다)
+    public void changeQuantity(int quantity) {
+        this.quantity = quantity;
+    }
+
     // 저장(INSERT)·수정(UPDATE) 직전에 JPA가 자동으로 불러서 수정 시각을 기록한다
     @PrePersist
     @PreUpdate

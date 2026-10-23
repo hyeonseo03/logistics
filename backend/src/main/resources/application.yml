@@ -17,6 +17,7 @@ spring:
     properties:
       hibernate:
         format_sql: true # SQL을 줄바꿈해서 읽기 좋게 출력
+        default_batch_fetch_size: 100 # 연관 데이터(주문 상품 등)를 1건씩이 아니라 최대 100건씩 묶어서(IN 쿼리) 가져온다 → N+1 완화
 
 logging:
   level:
