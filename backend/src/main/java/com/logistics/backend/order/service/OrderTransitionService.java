@@ -41,14 +41,25 @@ public class OrderTransitionService {
     // 주문 id 로 상태 변경 (관리자 상태 변경 API 에서 사용)
     @Transactional
     public Order changeStatus(Long orderId, OrderStatus next, Long changedBy) {
+        return changeStatus(orderId, next, changedBy, LocalDateTime.now());
+    }
+
+    // 시각을 직접 정하는 버전 (샘플 데이터처럼 과거 시각으로 기록할 때)
+    @Transactional
+    public Order changeStatus(Long orderId, OrderStatus next, Long changedBy, LocalDateTime at) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        changeStatus(order, next, changedBy, null);
+        changeStatus(order, next, changedBy, null, at);
         return order;
     }
 
     @Transactional
     public void changeStatus(Order order, OrderStatus next, Long changedBy, String reason) {
+        changeStatus(order, next, changedBy, reason, LocalDateTime.now());
+    }
+
+    @Transactional
+    public void changeStatus(Order order, OrderStatus next, Long changedBy, String reason, LocalDateTime now) {
         OrderStatus previous = order.getStatus();
         order.changeStatus(next); // 허용되지 않는 변경이면 여기서 예외
 
@@ -57,7 +68,6 @@ public class OrderTransitionService {
         // 재고·환불을 건드리기 전에 여기서 바로 실패한다 (낙관적 락)
         orderRepository.saveAndFlush(order);
 
-        LocalDateTime now = LocalDateTime.now();
         switch (next) {
             case CANCELED -> {
                 for (OrderItem item : order.getItems()) {

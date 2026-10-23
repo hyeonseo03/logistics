@@ -11,6 +11,7 @@ import com.logistics.backend.warehouse.entity.WarehouseRegion;
 import com.logistics.backend.warehouse.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ import java.util.List;
 // 서버가 시작될 때 한 번 실행된다. 프론트 mocks/ 의 categories, products, warehouses, inventory 와 같은 데이터를 넣는다
 // 테이블마다 비어 있을 때만 넣으므로 서버를 다시 켜도 중복되지 않는다
 @Component
+@Order(2) // 관리자 계정(AdminInitializer) 다음, 샘플 주문(SampleOrderInitializer) 전에 실행
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
 

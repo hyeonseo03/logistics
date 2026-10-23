@@ -32,3 +32,5 @@ app:
   admin:
     email: ${ADMIN_EMAIL:}       # 비어 있으면 관리자 계정을 만들지 않는다
     password: ${ADMIN_PASSWORD:}
+  sample-data:
+    enabled: true                # orders 가 비어 있으면 샘플 주문·배송 데이터를 넣는다

@@ -63,13 +63,18 @@ public class OrderService {
     //  4) 모의 결제(결제완료) 기록  5) 상태 이력·배송(shipments) 생성  6) 주문한 상품을 장바구니에서 삭제
     @Transactional
     public OrderResponse createOrder(Long userId, CreateOrderRequest request) {
+        return createOrder(userId, request, LocalDateTime.now());
+    }
+
+    // 주문 시각을 직접 정하는 버전 (샘플 데이터처럼 과거 주문을 만들 때)
+    @Transactional
+    public OrderResponse createOrder(Long userId, CreateOrderRequest request, LocalDateTime now) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         Delivery delivery = resolveDelivery(userId, request.addressId(),
                 request.receiverName(), request.receiverPhone(), request.address());
 
         List<CartItem> cartItems = selectCartItems(userId, request.productIds());
-        LocalDateTime now = LocalDateTime.now();
 
         Order order = new Order(user, request.paymentMethod(),
                 delivery.receiverName(), delivery.receiverPhone(), delivery.address(), now);
