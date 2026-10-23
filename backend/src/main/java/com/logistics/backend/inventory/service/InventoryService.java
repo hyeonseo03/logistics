@@ -2,6 +2,7 @@ package com.logistics.backend.inventory.service;
 
 import com.logistics.backend.global.exception.BusinessException;
 import com.logistics.backend.global.exception.ErrorCode;
+import com.logistics.backend.inventory.dto.InventoryAdjustRequest;
 import com.logistics.backend.inventory.dto.InventoryResponse;
 import com.logistics.backend.inventory.entity.Inventory;
 import com.logistics.backend.inventory.repository.InventoryRepository;
@@ -9,6 +10,7 @@ import com.logistics.backend.product.entity.Product;
 import com.logistics.backend.product.repository.ProductRepository;
 import com.logistics.backend.warehouse.entity.Warehouse;
 import com.logistics.backend.warehouse.entity.WarehouseRegion;
+import com.logistics.backend.warehouse.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
     private final ProductRepository productRepository;
+    private final WarehouseRepository warehouseRepository;
 
     public List<InventoryResponse> getInventories() {
         return inventoryRepository.findAllWithProductAndWarehouse().stream()
@@ -40,6 +43,29 @@ public class InventoryService {
         return inventoryRepository.findAllWithProductAndWarehouseByProductId(productId).stream()
                 .map(InventoryResponse::from)
                 .toList();
+    }
+
+    // 관리자 재고 조정: 현재재고를 지정한 수량으로 맞춘다 (재고 행이 없으면 새로 만든다)
+    // 비관적 락(SELECT ... FOR UPDATE)으로 행을 잠근 뒤 읽고 고친다.
+    // 그래서 조정하는 동안 들어온 주문의 예약(UPDATE)은 이 트랜잭션이 끝날 때까지 기다렸다가 새 값 기준으로 처리된다
+    @Transactional
+    public InventoryResponse adjust(InventoryAdjustRequest request) {
+        Product product = productRepository.findById(request.productId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        Warehouse warehouse = warehouseRepository.findById(request.warehouseId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND));
+
+        Inventory inventory = inventoryRepository.findForUpdate(product.getId(), warehouse.getId())
+                .orElseGet(() -> inventoryRepository.save(new Inventory(product, warehouse, 0, 0)));
+
+        // 이미 주문으로 예약된 수량보다 적게 만들면, 예약된 주문을 출고할 수 없게 된다
+        if (request.quantity() < inventory.getReservedQuantity()) {
+            throw new BusinessException(ErrorCode.INVALID_STOCK_QUANTITY,
+                    "예약된 수량(" + inventory.getReservedQuantity() + "개)보다 적게 설정할 수 없습니다.");
+        }
+        inventory.changeQuantity(request.quantity());
+        inventoryRepository.flush(); // updatedAt(@PreUpdate)을 반영해서 응답에 담는다
+        return InventoryResponse.from(inventory);
     }
 
     // ───────── 재고 변경 (주문·취소·출고·회수에서 호출, 호출한 쪽의 트랜잭션에 함께 묶인다) ─────────

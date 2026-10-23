@@ -38,6 +38,10 @@ public class TestFixtures {
         return product;
     }
 
+    public Long anyCategoryId() {
+        return categoryRepository.findAll().get(0).getId();
+    }
+
     public Warehouse warehouse(WarehouseRegion region) {
         return warehouseRepository.findAll().stream()
                 .filter(w -> w.getRegion() == region)

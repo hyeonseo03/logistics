@@ -1,10 +1,12 @@
 package com.logistics.backend.shipment.service;
 
+import com.logistics.backend.global.dto.PageResponse;
 import com.logistics.backend.global.exception.BusinessException;
 import com.logistics.backend.global.exception.ErrorCode;
 import com.logistics.backend.order.entity.Order;
 import com.logistics.backend.order.entity.OrderStatus;
 import com.logistics.backend.order.repository.OrderRepository;
+import com.logistics.backend.shipment.dto.AdminShipmentResponse;
 import com.logistics.backend.shipment.dto.EtaRequest;
 import com.logistics.backend.shipment.dto.EtaResult;
 import com.logistics.backend.shipment.dto.ShipmentEventResponse;
@@ -17,11 +19,16 @@ import com.logistics.backend.shipment.repository.ShipmentEventRepository;
 import com.logistics.backend.shipment.repository.ShipmentRepository;
 import com.logistics.backend.warehouse.entity.WarehouseRegion;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -116,6 +123,33 @@ public class ShipmentService {
                 events,
                 estimate(order, shipment, LocalDateTime.now()).orElse(null)
         );
+    }
+
+    // GET /api/admin/shipments?status=SHIPPED&page=0&size=20
+    public PageResponse<AdminShipmentResponse> getAdminShipments(ShipmentStatus status, int page, int size) {
+        PageRequest pageable = PageRequest.of(page, size);
+        Page<Shipment> shipments = (status == null)
+                ? shipmentRepository.findAllWithDetails(pageable)
+                : shipmentRepository.findAllWithDetailsByStatus(status, pageable);
+
+        // 이 페이지 배송들의 이력을 한 번에 가져와서 배송별 "가장 최근 이력" 만 남긴다 (N+1 방지)
+        List<Long> shipmentIds = shipments.getContent().stream().map(Shipment::getId).toList();
+        Map<Long, ShipmentEventResponse> lastEventByShipmentId = new LinkedHashMap<>();
+        if (!shipmentIds.isEmpty()) {
+            for (ShipmentEvent event : eventRepository.findAllByShipmentIds(shipmentIds)) {
+                lastEventByShipmentId.put(event.getShipment().getId(), ShipmentEventResponse.from(event)); // 오래된 순이라 마지막 값이 최신
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<AdminShipmentResponse> content = shipments.getContent().stream()
+                .map(shipment -> AdminShipmentResponse.of(
+                        ShipmentResponse.from(shipment),
+                        shipment.getOrder(),
+                        lastEventByShipmentId.get(shipment.getId()),
+                        estimate(shipment.getOrder(), shipment, now).orElse(null)))
+                .toList();
+        return PageResponse.from(new PageImpl<>(content, pageable, shipments.getTotalElements()));
     }
 
     // 도착 예상 시각 (AI 도우미도 사용)

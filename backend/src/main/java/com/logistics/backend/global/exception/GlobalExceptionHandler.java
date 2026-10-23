@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -36,6 +37,7 @@ public class GlobalExceptionHandler {
 
     // JSON 모양이 틀렸거나, 숫자 자리에 글자가 오는 등 요청을 읽을 수 없을 때
     @ExceptionHandler({
+            HandlerMethodValidationException.class, // @RequestParam @Min(0) 같은 검사 실패
             HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class,
             MissingServletRequestParameterException.class

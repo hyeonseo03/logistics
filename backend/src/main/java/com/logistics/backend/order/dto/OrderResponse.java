@@ -13,6 +13,7 @@ import java.util.List;
 public record OrderResponse(
         Long id,
         Long userId,
+        String userName,          // 주문자 이름 (관리자 화면용, 프론트 AdminOrder.userName)
         OrderStatus status,
         String statusLabel,       // 화면 표시용 한국어 (예: "주문완료")
         PaymentMethod paymentMethod,
@@ -33,6 +34,7 @@ public record OrderResponse(
         return new OrderResponse(
                 order.getId(),
                 order.getUser().getId(),
+                order.getUser().getName(),
                 order.getStatus(),
                 order.getStatus().getLabel(),
                 order.getPaymentMethod(),

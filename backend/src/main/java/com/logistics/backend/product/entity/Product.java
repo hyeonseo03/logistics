@@ -56,4 +56,14 @@ public class Product {
         this.imageUrl = imageUrl;
         this.createdAt = createdAt;
     }
+
+    // 관리자 상품 수정
+    public void update(Category category, String name, String description, int price, String optionName, String imageUrl) {
+        this.category = category;
+        this.name = name;
+        this.description = description;
+        this.price = price;
+        this.optionName = optionName;
+        this.imageUrl = imageUrl;
+    }
 }
