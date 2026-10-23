@@ -1,13 +1,13 @@
 package com.logistics.backend.inventory.service;
 
+import com.logistics.backend.global.exception.BusinessException;
+import com.logistics.backend.global.exception.ErrorCode;
 import com.logistics.backend.inventory.dto.InventoryResponse;
 import com.logistics.backend.inventory.repository.InventoryRepository;
 import com.logistics.backend.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -28,7 +28,7 @@ public class InventoryService {
     public List<InventoryResponse> getInventoriesByProduct(Long productId) {
         // 없는 상품이면 빈 목록 대신 404 를 돌려준다
         if (!productRepository.existsById(productId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다. id=" + productId);
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND, "상품을 찾을 수 없습니다. id=" + productId);
         }
 
         return inventoryRepository.findAllWithProductAndWarehouseByProductId(productId).stream()

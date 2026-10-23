@@ -1,15 +1,15 @@
 package com.logistics.backend.product.service;
 
+import com.logistics.backend.global.exception.BusinessException;
+import com.logistics.backend.global.exception.ErrorCode;
 import com.logistics.backend.inventory.dto.ProductStockTotal;
 import com.logistics.backend.inventory.repository.InventoryRepository;
 import com.logistics.backend.product.dto.ProductResponse;
 import com.logistics.backend.product.entity.Product;
 import com.logistics.backend.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -42,7 +42,7 @@ public class ProductService {
 
     public ProductResponse getProduct(Long id) {
         Product product = productRepository.findByIdWithCategory(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다. id=" + id));
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND, "상품을 찾을 수 없습니다. id=" + id));
 
         return ProductResponse.from(product, inventoryRepository.sumTotalStockByProductId(id));
     }
