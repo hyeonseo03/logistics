@@ -2,6 +2,7 @@
 
 // 로그인한 회원 정보를 모든 화면(소비자 + 관리자)에서 함께 쓰기 위한 Context
 
+import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import * as api from "@/lib/api";
 import type { User } from "@/types/user";
@@ -9,6 +10,8 @@ import type { User } from "@/types/user";
 interface AuthContextValue {
   user: User | null; // 로그인하지 않았으면 null
   loading: boolean; // 처음에 로그인 정보를 확인하는 중인지
+  // 로그아웃 버튼을 누른 화면의 주소. 그 화면에서는 로그인 화면으로 보내지 않고 홈으로 간다 (RequireLogin 참고)
+  logoutPath: string | null;
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>; // 내 정보를 수정한 뒤 최신 정보로 다시 불러온다
@@ -19,6 +22,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [logoutPath, setLogoutPath] = useState<string | null>(null);
+  const pathname = usePathname();
 
   // 처음 화면이 열릴 때 저장된 토큰으로 이미 로그인되어 있는지 확인한다
   // (서버에 연결할 수 없으면 로그인 안 한 상태로 본다)
@@ -35,11 +40,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function login(email: string, password: string) {
     const loggedInUser = await api.login(email, password);
     setUser(loggedInUser);
+    setLogoutPath(null);
     return loggedInUser;
   }
 
   async function logout() {
     await api.logout();
+    setLogoutPath(pathname);
     setUser(null);
   }
 
@@ -48,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, logoutPath, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

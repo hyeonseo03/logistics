@@ -2,21 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/components/common/AuthContext";
-import LoginRequired from "@/components/common/LoginRequired";
+import RequireLogin from "@/components/common/RequireLogin";
 import MyPageMenu from "@/components/mypage/MyPageMenu";
 
 // 마이페이지 공통 레이아웃
 // - 로그인 확인은 여기서 한 번만 한다 (그래서 각 페이지에서는 로그인되어 있다고 보고 만든다)
+//   로그인하지 않았으면 /login?redirect=지금주소 로 보낸다
 // - PC: 왼쪽 사이드 메뉴 + 오른쪽 본문
 // - 모바일: 사이드 메뉴 없이 본문만. 하위 페이지에서는 "← 마이페이지" 로 돌아간다
 export default function MyPageLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  return (
+    <RequireLogin>
+      <MyPageFrame>{children}</MyPageFrame>
+    </RequireLogin>
+  );
+}
+
+function MyPageFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-
-  if (loading) return <p className="p-8 text-gray-500">불러오는 중...</p>;
-  if (!user) return <LoginRequired title="마이페이지" />;
-
   const isHome = pathname === "/mypage";
 
   return (

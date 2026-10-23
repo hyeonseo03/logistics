@@ -29,7 +29,7 @@
 
 | 메서드 | 주소 | 설명 |
 |---|---|---|
-| POST | `/api/auth/signup` | 회원가입 (항상 USER). 201 + `UserResponse` |
+| POST | `/api/auth/signup` | 회원가입 (항상 USER). 201 + `UserResponse`. 이미 가입된 이메일이면 (동시에 가입해도) 409 `DUPLICATE_EMAIL` |
 | POST | `/api/auth/login` | 로그인 → JWT 발급 |
 | GET | `/api/auth/me` | 내 정보 (= `GET /api/users/me`) |
 | GET | `/api/users/me` | 내 정보 |

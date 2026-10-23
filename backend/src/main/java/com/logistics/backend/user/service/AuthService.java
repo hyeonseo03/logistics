@@ -11,6 +11,7 @@ import com.logistics.backend.user.entity.Role;
 import com.logistics.backend.user.entity.User;
 import com.logistics.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +40,14 @@ public class AuthService {
                 request.phone(),
                 Role.USER
         );
-        return UserResponse.from(userRepository.save(user));
+        try {
+            // saveAndFlush: INSERT 를 바로 실행해서, unique 제약 위반을 이 자리에서 잡는다
+            return UserResponse.from(userRepository.saveAndFlush(user));
+        } catch (DataIntegrityViolationException e) {
+            // 같은 이메일로 동시에 가입하면 두 요청 모두 위의 existsByEmail 검사를 통과할 수 있다.
+            // 그러면 DB 의 unique 제약(users.email)이 두 번째 INSERT 를 막는데, 그 에러를 500 대신 409 로 바꾼다
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        }
     }
 
     // 로그인: 이메일·비밀번호가 맞으면 JWT 토큰을 발급한다

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/common/AuthContext";
-import LoginRequired from "@/components/common/LoginRequired";
+import RequireLogin from "@/components/common/RequireLogin";
 import { useCart } from "@/components/order/CartContext";
 import { createOrder, getMyAddresses } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
@@ -13,11 +13,16 @@ import type { Order, PaymentMethod } from "@/types/order";
 import type { Address, User } from "@/types/user";
 
 export default function CheckoutPage() {
-  const { user, loading } = useAuth();
+  return (
+    <RequireLogin>
+      <CheckoutContent />
+    </RequireLogin>
+  );
+}
 
-  if (loading) return <p className="p-8 text-gray-500">불러오는 중...</p>;
-  if (!user) return <LoginRequired title="주문/결제" />;
-
+function CheckoutContent() {
+  const { user } = useAuth();
+  if (!user) return null; // RequireLogin 안이라 항상 로그인되어 있다
   return <CheckoutLoader user={user} />;
 }
 

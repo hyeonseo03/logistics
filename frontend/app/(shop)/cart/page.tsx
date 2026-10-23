@@ -2,14 +2,21 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import LoginRequired from "@/components/common/LoginRequired";
-import { useAuth } from "@/components/common/AuthContext";
+import RequireLogin from "@/components/common/RequireLogin";
 import { useCart } from "@/components/order/CartContext";
 import CartItemRow from "@/components/order/CartItemRow";
 import CartSummary from "@/components/order/CartSummary";
 
+// 로그인하지 않았으면 로그인 화면으로 보냈다가 돌아온다
 export default function CartPage() {
-  const { user, loading: authLoading } = useAuth();
+  return (
+    <RequireLogin>
+      <CartContent />
+    </RequireLogin>
+  );
+}
+
+function CartContent() {
   const {
     items,
     loading,
@@ -24,8 +31,6 @@ export default function CartPage() {
   } = useCart();
   const [actionError, setActionError] = useState(""); // 삭제 실패 안내
 
-  if (authLoading) return <p className="p-8 text-gray-500">불러오는 중...</p>;
-  if (!user) return <LoginRequired title="장바구니" />;
   if (loading) return <p className="p-8 text-gray-500">장바구니를 불러오는 중...</p>;
 
   if (error && items.length === 0) {
