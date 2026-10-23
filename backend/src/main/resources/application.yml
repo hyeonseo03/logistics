@@ -2,6 +2,10 @@ spring:
   application:
     name: backend
 
+  # backend/.env 파일이 있으면 그 안의 환경변수(DB_PASSWORD 등)를 읽는다 (없으면 무시). .env 는 git 에 올라가지 않는다
+  config:
+    import: optional:file:.env[.properties]
+
   datasource:
     url: jdbc:postgresql://localhost:5432/logistics
     username: postgres
@@ -17,3 +21,13 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug # 실행되는 SQL을 로그로 출력
+
+# 비밀값은 모두 환경변수로 받는다 (backend/.env.example 참고)
+jwt:
+  secret: ${JWT_SECRET}          # 32자 이상의 임의 문자열
+  expiration-seconds: 86400      # 로그인 토큰 유효 시간 (24시간)
+
+app:
+  admin:
+    email: ${ADMIN_EMAIL:}       # 비어 있으면 관리자 계정을 만들지 않는다
+    password: ${ADMIN_PASSWORD:}

@@ -13,3 +13,8 @@ spring:
 logging:
   level:
     org.hibernate.SQL: info
+
+# 테스트 전용 값 (실제 서버는 환경변수 JWT_SECRET 을 쓴다)
+jwt:
+  secret: test-only-jwt-secret-for-unit-tests-0123456789
+  expiration-seconds: 3600
