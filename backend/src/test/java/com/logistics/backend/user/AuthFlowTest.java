@@ -10,6 +10,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static com.logistics.backend.TestAuth.signupAndLogin;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -111,21 +113,6 @@ class AuthFlowTest {
         // 상품 조회는 로그인 없이 가능
         mockMvc.perform(get("/api/products")).andExpect(status().isOk());
         mockMvc.perform(get("/api/categories")).andExpect(status().isOk());
-    }
-
-    // 다른 테스트에서도 쓰는 도우미: 회원가입 후 로그인해서 토큰을 돌려준다
-    static String signupAndLogin(MockMvc mockMvc, String email, String password) throws Exception {
-        mockMvc.perform(post("/api/auth/signup").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password
-                                + "\",\"name\":\"테스트\",\"phone\":\"010-1234-5678\"}"))
-                .andExpect(status().isCreated());
-
-        String body = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andReturn().getResponse().getContentAsString();
-        return JsonPath.read(body, "$.accessToken");
     }
 
     private static String addressJson(String label, boolean isDefault) {
