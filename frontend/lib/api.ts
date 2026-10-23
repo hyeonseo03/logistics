@@ -515,6 +515,12 @@ export async function deleteProduct(productId: number): Promise<void> {
   await del<void>(`/api/admin/products/${productId}`);
 }
 
+// PUT /api/admin/inventories: 물류센터 한 곳의 현재재고(실물)를 quantity 개로 맞춘다 (재고 행이 없으면 새로 만든다)
+// 이미 주문으로 예약된 수량보다 적게 하면 400 "예약된 수량(N개)보다 적게 설정할 수 없습니다."
+export async function adjustInventory(productId: number, warehouseId: number, quantity: number): Promise<InventoryResponse> {
+  return put<InventoryResponse>("/api/admin/inventories", { productId, warehouseId, quantity });
+}
+
 // GET /api/admin/products + /api/admin/warehouses + /api/admin/inventories 를 합쳐서 재고 표를 만든다
 export async function getInventoryTable(): Promise<InventoryTable> {
   const [productList, warehouseList, inventories] = await Promise.all([

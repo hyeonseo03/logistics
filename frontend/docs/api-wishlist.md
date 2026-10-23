@@ -25,8 +25,8 @@
 | 배송지 관리 | 배송지 CRUD | `/api/users/me/addresses` 묶음 |
 | AI 도우미 `/ai` | 질문 → 답변(+상품 검색 결과) | `POST /api/assistant/chat` |
 | 관리자 대시보드 | 오늘 주문·매출, 상태별 주문, 품절 임박 | `GET /api/admin/dashboard` |
-| 관리자 상품 관리 | 상품 CRUD | `GET/POST/PUT/DELETE /api/admin/products` |
-| 관리자 재고 관리 | 센터별 현재·예약·판매가능 재고 | `GET /api/admin/inventories`, `/api/admin/warehouses`, `/api/admin/products` |
+| 관리자 상품 관리 | 상품 CRUD + 사진(미리보기) | `GET/POST/PUT/DELETE /api/admin/products`, `POST /api/admin/products/{id}/image` **(신규)** |
+| 관리자 재고 관리 | 센터별 현재·예약·판매가능 재고, 칸마다 재고 조정 | `GET /api/admin/inventories`, `/api/admin/warehouses`, `/api/admin/products`, `PUT /api/admin/inventories` |
 | 관리자 주문 관리 | 상태 필터, 페이지, 다음 단계 버튼 | `GET /api/admin/orders`, `PATCH /api/admin/orders/{id}/status` |
 | 관리자 배송 관리 | 배송 상태, 예상 도착, 지연 | `GET /api/admin/shipments` + 주문 상태 변경 API |
 | 관리자 회원 관리 | 회원 목록 + 주문 수 | `GET /api/admin/users` |
