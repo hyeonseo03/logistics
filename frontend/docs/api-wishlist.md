@@ -9,7 +9,7 @@
 
 | 화면 | 필요한 데이터 | 사용하는 API |
 |---|---|---|
-| 홈 `/` | 오늘 출고 가능 상품, 품절 임박 상품 | `GET /api/products`, `/api/inventories`, `/api/warehouses` |
+| 홈 `/` | 카테고리 4개, 오늘 출고 가능 상품(당일 출고 센터 + 재고), 품절 임박 상품(1~9개) | `GET /api/categories`, `/api/products`, `/api/inventories`, `/api/warehouses` |
 | 상품 목록·상세 | 상품 + 재고 + 예상 도착일 | `GET /api/products`, `/api/products/{id}`, `/api/products/{id}/inventories`, `/api/categories` |
 | 재입고 알림 신청 (상세) | 품절 상품 알림 | `POST /api/products/{id}/restock-alerts` **(신규)** |
 | 로그인 `/login?redirect=` | 이메일·비밀번호 → JWT | `POST /api/auth/login`, `GET /api/auth/me` |
