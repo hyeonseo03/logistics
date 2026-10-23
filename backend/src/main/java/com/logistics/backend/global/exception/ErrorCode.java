@@ -37,6 +37,11 @@ public enum ErrorCode {
     INVALID_STOCK_QUANTITY(HttpStatus.BAD_REQUEST, "재고 수량은 예약된 수량보다 적게 설정할 수 없습니다."),
     RESTOCK_ALERT_NOT_FOUND(HttpStatus.NOT_FOUND, "재입고 알림 신청 내역을 찾을 수 없습니다."),
 
+    // 상품 이미지
+    INVALID_IMAGE(HttpStatus.BAD_REQUEST, "jpg, png, webp 형식의 이미지만 올릴 수 있습니다."),
+    IMAGE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "이미지는 5MB 이하만 올릴 수 있습니다."),
+    IMAGE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이미지를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."),
+
     // 장바구니·주문
     CART_EMPTY(HttpStatus.BAD_REQUEST, "주문할 상품이 장바구니에 없습니다."),
     CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니에 없는 상품입니다."),

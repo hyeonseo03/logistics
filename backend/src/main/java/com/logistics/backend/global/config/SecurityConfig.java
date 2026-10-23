@@ -50,6 +50,8 @@ public class SecurityConfig {
                                 "/api/categories", "/api/categories/**",
                                 "/api/warehouses", "/api/warehouses/**",
                                 "/api/inventories").permitAll()
+                        // 누구나: 업로드된 상품 이미지 (WebConfig 가 backend/uploads 폴더의 파일을 보여준다)
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         // 누구나: AI 도우미 (로그인했으면 내 주문 정보까지 답한다)
                         .requestMatchers("/api/assistant/**", "/api/ai/**").permitAll()
                         // 관리자만

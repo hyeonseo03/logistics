@@ -12,6 +12,8 @@ out/
 # 백엔드
 build/
 .gradle/
+# 관리자가 올린 상품 이미지 (서버를 실행하면 생긴다)
+backend/uploads/
 
 # IDE
 .idea/

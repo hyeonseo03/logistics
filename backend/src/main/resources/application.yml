@@ -11,6 +11,12 @@ spring:
     username: postgres
     password: ${DB_PASSWORD}
 
+  # 상품 이미지 업로드: 파일 하나 5MB 까지 (넘으면 413 IMAGE_TOO_LARGE)
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   jpa:
     hibernate:
       ddl-auto: update # 개발용: 엔티티에 맞춰 테이블을 자동 생성/수정
@@ -34,3 +40,5 @@ app:
     password: ${ADMIN_PASSWORD:}
   sample-data:
     enabled: true                # orders 가 비어 있으면 샘플 주문·배송 데이터를 넣는다
+  upload:
+    dir: uploads                 # 상품 이미지 저장 폴더 (backend/uploads, git 에 올리지 않는다). /uploads/** 주소로 제공

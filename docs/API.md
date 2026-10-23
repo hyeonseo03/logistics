@@ -21,7 +21,7 @@
 
 | 누구나 | 로그인 필요 | ADMIN 만 |
 |---|---|---|
-| 회원가입·로그인, 상품·카테고리·물류센터·재고 **조회(GET)**, AI 도우미 | 장바구니, 주문, 배송 조회, 내 정보, 배송지, 재입고 알림, 취소·회수 내역 | `/api/admin/**` |
+| 회원가입·로그인, 상품·카테고리·물류센터·재고 **조회(GET)**, 상품 이미지(`/uploads/**`), AI 도우미 | 장바구니, 주문, 배송 조회, 내 정보, 배송지, 재입고 알림, 취소·회수 내역 | `/api/admin/**` |
 
 ---
 
@@ -285,6 +285,7 @@ SHIPPED, IN_TRANSIT, DELIVERED ─→ RETURNING(회수중) → RETURNED(회수�
 | POST | `/api/admin/products` | 상품 등록. 201 |
 | PUT | `/api/admin/products/{id}` | 상품 수정 |
 | DELETE | `/api/admin/products/{id}` | 상품 삭제. 주문 이력이 있으면 409 `PRODUCT_IN_USE`. 204 |
+| POST | `/api/admin/products/{id}/image` | 상품 사진 업로드 (multipart, 이름표 `file`). jpg·png·webp, 5MB 이하. 형식이 틀리면 400 `INVALID_IMAGE`, 크면 413 `IMAGE_TOO_LARGE`. 응답은 `imageUrl` 이 `/uploads/products/...` 로 바뀐 `ProductResponse` |
 | GET | `/api/admin/inventories` | 재고 목록 |
 | PUT | `/api/admin/inventories` | 재고 조정 `{ "productId": 1, "warehouseId": 2, "quantity": 50 }` (비관적 락) |
 | GET | `/api/admin/warehouses` | 물류센터 목록 |

@@ -57,6 +57,11 @@ public class Product {
         this.createdAt = createdAt;
     }
 
+    // 관리자 이미지 업로드
+    public void changeImage(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
+
     // 관리자 상품 수정
     public void update(Category category, String name, String description, int price, String optionName, String imageUrl) {
         this.category = category;

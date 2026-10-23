@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import ProductForm from "@/components/admin/ProductForm";
 import { useToast } from "@/components/common/Toast";
 import ProductImage from "@/components/product/ProductImage";
-import { createProduct, deleteProduct, getAdminProducts, getCategories, updateProduct } from "@/lib/api";
+import {
+  createProduct,
+  deleteProduct,
+  getAdminProducts,
+  getCategories,
+  updateProduct,
+  uploadProductImage,
+} from "@/lib/api";
 import { formatPrice } from "@/lib/format";
 import type { Category, ProductRequest, ProductResponse } from "@/types/product";
 
@@ -17,7 +24,7 @@ const emptyProduct: ProductRequest = {
   imageUrl: null,
 };
 
-// 상품 관리: 목록 + 등록 + 수정 + 삭제
+// 상품 관리: 목록 + 등록 + 수정(사진 업로드 포함) + 삭제
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ProductResponse[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -45,17 +52,30 @@ export default function AdminProductsPage() {
       .catch((err) => setLoadError(err instanceof Error ? err.message : "상품 목록을 불러오지 못했습니다."));
   }, []);
 
-  async function handleCreate(request: ProductRequest) {
+  // 사진은 상품을 저장한 다음에 올린다 (새 상품은 id 가 있어야 올릴 수 있으므로)
+  // 사진만 실패하면 상품은 저장된 채로 두고 실패 알림만 보여준다
+  async function uploadImageAfterSave(productId: number, imageFile: File | null) {
+    if (!imageFile) return;
+    try {
+      await uploadProductImage(productId, imageFile);
+      showToast("상품 사진을 올렸습니다.");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "사진을 올리지 못했습니다.", "error");
+    }
+  }
+
+  async function handleCreate(request: ProductRequest, imageFile: File | null) {
     const created = await createProduct(request);
     showToast(`'${created.name}' 상품을 등록했습니다. 재고 관리에서 재고를 넣어 주세요.`);
+    await uploadImageAfterSave(created.id, imageFile);
     setAdding(false);
-    setEditingId(created.id); // 이어서 사진을 올릴 수 있게 수정 폼을 연다
     await reload();
   }
 
-  async function handleUpdate(productId: number, request: ProductRequest) {
+  async function handleUpdate(productId: number, request: ProductRequest, imageFile: File | null) {
     const updated = await updateProduct(productId, request);
     showToast(`'${updated.name}' 상품을 수정했습니다.`);
+    await uploadImageAfterSave(productId, imageFile);
     await reload();
   }
 
@@ -123,7 +143,7 @@ export default function AdminProductsPage() {
               imageUrl: editing.imageUrl,
             }}
             submitLabel="수정 저장"
-            onSubmit={(request) => handleUpdate(editing.id, request)}
+            onSubmit={(request, imageFile) => handleUpdate(editing.id, request, imageFile)}
             onCancel={() => setEditingId(null)}
           />
         </section>

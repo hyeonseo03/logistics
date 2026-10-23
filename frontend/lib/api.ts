@@ -502,6 +502,14 @@ export async function updateProduct(productId: number, request: ProductRequest):
   return put<ProductResponse>(`/api/admin/products/${productId}`, request);
 }
 
+// POST /api/admin/products/{id}/image (multipart/form-data. jpg·png·webp, 5MB 이하)
+// 성공하면 imageUrl 이 바뀐 상품을 돌려준다. 예전 사진 파일은 백엔드가 지운다
+export async function uploadProductImage(productId: number, file: File): Promise<ProductResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  return post<ProductResponse>(`/api/admin/products/${productId}/image`, form);
+}
+
 // DELETE /api/admin/products/{id} (주문된 적 있는 상품이면 409 "주문 이력이 있는 상품은 삭제할 수 없습니다.")
 export async function deleteProduct(productId: number): Promise<void> {
   await del<void>(`/api/admin/products/${productId}`);

@@ -15,7 +15,7 @@
 ## 단계별 체크리스트
 - [x] 1단계: "준비중" 전부 없애기 (모든 화면 실제 API 연결)
 - [x] 2단계: 로그인·회원가입 흐름
-- [ ] 3단계: 상품 사진
+- [x] 3단계: 상품 사진
 - [ ] 4단계: 홈 꾸미기
 - [ ] 5단계: 관리자 전체 작동
 - [ ] 6단계: 최종 점검 (테스트, DEMO.md, README.md)
@@ -85,3 +85,14 @@
 - 백엔드: 같은 이메일 동시 가입 시 500 → 409 `DUPLICATE_EMAIL` (`AuthService` 에서 unique 제약 위반을 잡음)
   - 수정 전 `SignupTest` 로 재현: 10명 동시 가입 → `[201, 500 × 9]` / 수정 후 `[201, 409 × 9]`, DB 에 1명만 저장
   - 새로 가입한 회원이 `users` 테이블에 저장되는지(BCrypt 암호화, USER 권한) 테스트로 확인
+
+### 3단계 결과
+- 백엔드 `POST /api/admin/products/{id}/image` (multipart, 이름표 `file`, 관리자만)
+  - 검사: 빈 파일, 5MB 초과(413 `IMAGE_TOO_LARGE`), 확장자 jpg/jpeg/png/webp, **파일 앞부분(매직 넘버)으로 진짜 형식 확인** (400 `INVALID_IMAGE`)
+  - 저장: `backend/uploads/products/{상품id}-{무작위}.{확장자}` (사용자가 보낸 파일 이름은 쓰지 않음), 예전에 올린 사진 파일 삭제
+  - 제공: `GET /uploads/**` (누구나, `WebConfig`), `products.image_url = "/uploads/products/..."`
+  - `.gitignore` 에 `backend/uploads/` 추가, 테스트는 `build/test-uploads` 에 저장
+  - `ProductImageTest` 3개: 저장·제공·교체 시 예전 파일 삭제, 형식·크기·빈 파일·파일 없음·없는 상품, 권한(401/403)
+- 프론트: 관리자 상품 등록·수정 폼에 사진 고르기 + 미리보기 (`ImagePicker`, 형식·5MB 먼저 검사), 저장할 때 함께 업로드
+- 사진 없는 상품: 카테고리별 색·아이콘 일러스트 (식품=초록·사과, 생활용품=하늘·집, 전자기기=남색·헤드폰, 패션=분홍·티셔츠)
+- `ProductImage` 사용처: 상품 목록·상세, 장바구니, 주문 내역, 재입고 알림, 관리자 상품 목록

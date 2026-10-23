@@ -26,3 +26,5 @@ jwt:
 app:
   sample-data:
     enabled: false
+  upload:
+    dir: build/test-uploads # 테스트에서 올린 이미지는 build 폴더에 저장 (gradlew clean 하면 지워진다)
