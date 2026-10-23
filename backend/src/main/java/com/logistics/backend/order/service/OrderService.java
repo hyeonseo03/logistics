@@ -6,8 +6,12 @@ import com.logistics.backend.global.exception.BusinessException;
 import com.logistics.backend.global.exception.ErrorCode;
 import com.logistics.backend.global.policy.ShippingFeePolicy;
 import com.logistics.backend.inventory.service.InventoryService;
+import com.logistics.backend.order.dto.CancelOrderResponse;
+import com.logistics.backend.order.dto.CancelResult;
+import com.logistics.backend.order.dto.ChangeAddressRequest;
 import com.logistics.backend.order.dto.CreateOrderRequest;
 import com.logistics.backend.order.dto.OrderResponse;
+import com.logistics.backend.order.entity.CancelType;
 import com.logistics.backend.order.entity.Order;
 import com.logistics.backend.order.entity.OrderItem;
 import com.logistics.backend.order.entity.OrderStatus;
@@ -48,6 +52,7 @@ public class OrderService {
     private final AddressService addressService;
     private final InventoryService inventoryService;
     private final OrderResponseAssembler assembler;
+    private final OrderTransitionService transitionService;
 
     // 장바구니 → 주문
     // 아래 작업이 모두 하나의 트랜잭션이다. 중간에 하나라도 실패하면(예: 두 번째 상품 재고 부족)
@@ -58,7 +63,8 @@ public class OrderService {
     public OrderResponse createOrder(Long userId, CreateOrderRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Delivery delivery = resolveDelivery(userId, request);
+        Delivery delivery = resolveDelivery(userId, request.addressId(),
+                request.receiverName(), request.receiverPhone(), request.address());
 
         List<CartItem> cartItems = selectCartItems(userId, request.productIds());
         LocalDateTime now = LocalDateTime.now();
@@ -95,6 +101,59 @@ public class OrderService {
         return assembler.toResponse(findMyOrder(userId, orderId));
     }
 
+    // POST /api/orders/{id}/cancel
+    // 지금 상태에 따라 결과가 달라진다 (규칙은 OrderStatus.cancelType())
+    //  - 주문완료·포장   → 즉시 취소 (예약재고 해제 + 환불)
+    //  - 출고·배송중·배송완료 → 회수중 (returns 생성, 관리자가 회수 완료하면 재고 복구 + 환불)
+    //  - 이미 취소·회수 → 아무것도 하지 않고 성공 (버튼을 두 번 눌러도 한 번만 처리되는 "멱등" 처리)
+    @Transactional
+    public CancelOrderResponse cancel(Long userId, Long orderId, String reason) {
+        Order order = findMyOrder(userId, orderId);
+        CancelType cancelType = order.getStatus().cancelType();
+
+        CancelResult result = switch (cancelType) {
+            case IMMEDIATE_CANCEL -> {
+                transitionService.changeStatus(order, OrderStatus.CANCELED, userId, reason);
+                yield CancelResult.CANCELED;
+            }
+            case RETURN -> {
+                transitionService.changeStatus(order, OrderStatus.RETURNING, userId, reason);
+                yield CancelResult.RETURN_REQUESTED;
+            }
+            case ALREADY_PROCESSED -> CancelResult.ALREADY_PROCESSED;
+        };
+        return toCancelResponse(result, order);
+    }
+
+    // 이미 취소/회수된 주문이면 "이미 처리됨" 응답을 만든다 (동시에 두 번 눌러 한쪽이 충돌로 실패했을 때 사용)
+    public CancelOrderResponse alreadyProcessedOrThrow(Long userId, Long orderId, RuntimeException conflict) {
+        Order order = findMyOrder(userId, orderId);
+        if (order.getStatus().cancelType() != CancelType.ALREADY_PROCESSED) {
+            throw conflict; // 다른 요청(예: 관리자 출고)이 먼저 처리된 경우 → 409 로 알려서 다시 확인하게 한다
+        }
+        return toCancelResponse(CancelResult.ALREADY_PROCESSED, order);
+    }
+
+    // PATCH /api/orders/{id}/address (출고 전에만 가능)
+    @Transactional
+    public OrderResponse changeAddress(Long userId, Long orderId, ChangeAddressRequest request) {
+        Order order = findMyOrder(userId, orderId);
+        Delivery delivery = resolveDelivery(userId, request.addressId(),
+                request.receiverName(), request.receiverPhone(), request.address());
+        order.changeDeliveryAddress(delivery.receiverName(), delivery.receiverPhone(), delivery.address());
+        orderRepository.saveAndFlush(order); // @Version 검사 (그 사이 출고되었다면 충돌)
+        return assembler.toResponse(order);
+    }
+
+    private CancelOrderResponse toCancelResponse(CancelResult result, Order order) {
+        String message = switch (result) {
+            case CANCELED -> "주문이 취소되었습니다. 결제 금액이 환불됩니다.";
+            case RETURN_REQUESTED -> "이미 출고된 주문이라 회수를 요청했습니다. 회수가 끝나면 환불됩니다.";
+            case ALREADY_PROCESSED -> "이미 취소(회수) 처리된 주문입니다.";
+        };
+        return new CancelOrderResponse(result, message, assembler.toResponse(order));
+    }
+
     Order findMyOrder(Long userId, Long orderId) {
         return orderRepository.findByIdAndUserId(orderId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
@@ -115,19 +174,19 @@ public class OrderService {
     }
 
     // 배송지: 저장된 배송지(addressId)를 고르거나, 직접 입력한 값을 쓴다
-    private Delivery resolveDelivery(Long userId, CreateOrderRequest request) {
-        if (request.addressId() != null) {
-            UserAddress saved = addressService.findMyAddress(userId, request.addressId());
+    private Delivery resolveDelivery(Long userId, Long addressId, String receiverName, String receiverPhone, String address) {
+        if (addressId != null) {
+            UserAddress saved = addressService.findMyAddress(userId, addressId);
             return new Delivery(saved.getReceiverName(), saved.getReceiverPhone(), saved.getAddress());
         }
 
-        if (!StringUtils.hasText(request.receiverName()) || !StringUtils.hasText(request.address())) {
+        if (!StringUtils.hasText(receiverName) || !StringUtils.hasText(address)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "배송지를 선택하거나 받는 사람과 주소를 입력해 주세요.");
         }
-        if (request.receiverPhone() == null || !PHONE_PATTERN.matcher(request.receiverPhone()).matches()) {
+        if (receiverPhone == null || !PHONE_PATTERN.matcher(receiverPhone).matches()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "전화번호 형식이 올바르지 않습니다. (예: 010-1234-5678)");
         }
-        return new Delivery(request.receiverName().trim(), request.receiverPhone(), request.address().trim());
+        return new Delivery(receiverName.trim(), receiverPhone, address.trim());
     }
 
     private record Delivery(String receiverName, String receiverPhone, String address) {

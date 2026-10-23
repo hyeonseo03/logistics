@@ -1,5 +1,7 @@
 package com.logistics.backend.order.entity;
 
+import com.logistics.backend.global.exception.BusinessException;
+import com.logistics.backend.global.exception.ErrorCode;
 import com.logistics.backend.user.entity.User;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -99,5 +101,24 @@ public class Order {
     public void applyShippingFee(int shippingFee) {
         this.shippingFee = shippingFee;
         this.totalPrice = productTotal + shippingFee;
+    }
+
+    // 상태 변경. 허용되지 않는 변경(예: 배송완료 → 포장)이면 예외 (규칙은 OrderStatus 에 있다)
+    public void changeStatus(OrderStatus next) {
+        if (!status.canChangeTo(next)) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_CHANGE,
+                    "'" + status.getLabel() + "' 상태에서는 '" + next.getLabel() + "'(으)로 바꿀 수 없습니다.");
+        }
+        this.status = next;
+    }
+
+    // 배송지 변경 (출고 전에만 가능)
+    public void changeDeliveryAddress(String receiverName, String receiverPhone, String address) {
+        if (!status.canChangeAddress()) {
+            throw new BusinessException(ErrorCode.ADDRESS_CHANGE_NOT_ALLOWED);
+        }
+        this.receiverName = receiverName;
+        this.receiverPhone = receiverPhone;
+        this.address = address;
     }
 }

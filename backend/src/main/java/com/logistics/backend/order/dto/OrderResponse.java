@@ -23,7 +23,8 @@ public record OrderResponse(
         String receiverPhone,
         String address,
         LocalDateTime createdAt,
-        List<OrderItemResponse> items
+        List<OrderItemResponse> items,
+        CancelInfo cancelInfo     // 지금 취소하면 어떻게 되는지 (즉시취소 / 회수 / 이미 처리됨)
 ) {
 
     public static OrderResponse of(Order order, PaymentStatus paymentStatus) {
@@ -41,7 +42,8 @@ public record OrderResponse(
                 order.getReceiverPhone(),
                 order.getAddress(),
                 order.getCreatedAt(),
-                order.getItems().stream().map(OrderItemResponse::from).toList()
+                order.getItems().stream().map(OrderItemResponse::from).toList(),
+                CancelInfo.from(order.getStatus())
         );
     }
 }
