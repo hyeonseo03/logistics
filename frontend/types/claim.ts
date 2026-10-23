@@ -1,24 +1,19 @@
-import type { Order, OrderItemWithProduct } from "@/types/order";
+import type { Order } from "@/types/order";
 
-// order_claims 테이블: 주문 취소 / 반품 / 교환 신청
-export type ClaimType = "CANCEL" | "RETURN" | "EXCHANGE";
+// 취소·회수 내역 (백엔드 GET /api/users/me/claims 응답)
+// CANCEL: 출고 전 즉시 취소 / RETURN: 출고 후 회수(반품)
+export type ClaimType = "CANCEL" | "RETURN";
 
-// REQUESTED: 접수 / IN_PROGRESS: 처리중(회수중 등) / COMPLETED: 완료 / REJECTED: 거절
-export type ClaimStatus = "REQUESTED" | "IN_PROGRESS" | "COMPLETED" | "REJECTED";
+// IN_PROGRESS: 회수중 / COMPLETED: 취소 완료·회수 완료
+export type ClaimStatus = "IN_PROGRESS" | "COMPLETED";
 
-export interface OrderClaim {
-  id: number;
-  orderId: number; // orders.id
-  userId: number; // users.id
+export interface Claim {
+  orderId: number;
   type: ClaimType;
   status: ClaimStatus;
-  reason: string;
-  createdAt: string;
-  completedAt: string | null; // 끝나지 않았으면 null
-}
-
-// 취소·반품·교환 내역 화면용 (order_claims + orders + order_items)
-export interface ClaimWithOrder extends OrderClaim {
+  statusLabel: string; // 예: "회수중"
+  reason: string | null;
+  requestedAt: string | null;
+  completedAt: string | null; // 진행 중이면 null
   order: Order;
-  items: OrderItemWithProduct[];
 }

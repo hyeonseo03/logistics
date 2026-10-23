@@ -52,9 +52,6 @@ export default function PasswordCheck({ onVerified }: { onVerified: () => void }
       >
         {checking ? "확인 중..." : "확인"}
       </button>
-
-      {/* mock 전용 안내 (백엔드 연결 후 삭제) */}
-      <p className="mt-3 text-xs text-gray-400">테스트용 비밀번호: 1234</p>
     </form>
   );
 }

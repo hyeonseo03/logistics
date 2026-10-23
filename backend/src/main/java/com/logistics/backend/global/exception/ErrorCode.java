@@ -35,6 +35,7 @@ public enum ErrorCode {
     PRODUCT_IN_USE(HttpStatus.CONFLICT, "주문 이력이 있는 상품은 삭제할 수 없습니다."),
     OUT_OF_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
     INVALID_STOCK_QUANTITY(HttpStatus.BAD_REQUEST, "재고 수량은 예약된 수량보다 적게 설정할 수 없습니다."),
+    RESTOCK_ALERT_NOT_FOUND(HttpStatus.NOT_FOUND, "재입고 알림 신청 내역을 찾을 수 없습니다."),
 
     // 장바구니·주문
     CART_EMPTY(HttpStatus.BAD_REQUEST, "주문할 상품이 장바구니에 없습니다."),

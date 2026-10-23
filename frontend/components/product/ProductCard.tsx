@@ -10,7 +10,7 @@ export default function ProductCard({ product }: { product: ProductWithStock }) 
       href={`/products/${product.id}`}
       className="block rounded-lg border bg-white p-4 hover:shadow-md"
     >
-      <ProductImage imageUrl={product.imageUrl} name={product.name} textSize="text-sm" />
+      <ProductImage imageUrl={product.imageUrl} name={product.name} categoryName={product.categoryName} />
 
       <p className="mt-3 text-xs text-gray-500">{product.categoryName}</p>
       <h2 className="font-semibold">{product.name}</h2>

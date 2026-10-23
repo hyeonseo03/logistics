@@ -3,8 +3,7 @@
 # Logistics 프론트엔드
 
 ## 프로젝트 개요
-- AI 물류·유통 플랫폼의 프론트엔드. 지금은 백엔드 없이 mock 데이터로만 동작한다.
-- 나중에 Spring Boot 백엔드(REST API)와 연결할 예정이다.
+- AI 물류·유통 플랫폼의 프론트엔드. Spring Boot 백엔드(REST API, ../backend)와 연결되어 있다. (API 목록: ../docs/API.md)
 - 나는 비전공자 초보 개발자다. 코드는 단순하고 읽기 쉽게 쓰고, 어려운 패턴은 피한다.
 
 ## 기술
@@ -13,14 +12,13 @@
 
 ## 폴더 규칙
 - types/ : 데이터 타입 정의 (나중에 백엔드 DTO와 일치시킬 것)
-- mocks/ : 가짜 데이터
-- lib/api.ts : 화면은 반드시 여기 함수만 호출한다. 지금은 mock을 반환하고, 나중에 fetch로 교체한다.
+- lib/api.ts : 화면은 반드시 여기 함수만 호출한다. 모든 함수가 백엔드 API 를 호출한다. (mocks/ 는 백엔드 연결 후 삭제함)
 - components/ : common, product, order, shipment, admin, ai 로 나눈다
-- 페이지 컴포넌트에서 mocks를 직접 import하지 않는다
+- 페이지 컴포넌트에서 fetch 를 직접 하지 않는다 (lib/api.ts 를 거친다)
 
 ## 데이터 규칙
-- mock 데이터는 DB 테이블처럼 id로 서로 참조한다 (예: order_items.productId)
-- 상태값은 enum 문자열 타입 사용 (예: "PREPARING" | "SHIPPED" | "IN_TRANSIT" | "DELIVERED")
+- 데이터는 DB 테이블처럼 id로 서로 참조한다 (예: order_items.productId)
+- 상태값은 백엔드 enum 과 같은 문자열 타입 사용 (예: "ORDERED" | "PACKING" | "SHIPPED" | ...)
 - 테이블: users, categories, products, warehouses, inventory, orders, order_items, shipments, shipment_events
 
 ## 작업 방식

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/common/AuthContext";
 import QuantitySelector from "@/components/common/QuantitySelector";
 import { useCart } from "@/components/order/CartContext";
 import ProductImage from "@/components/product/ProductImage";
@@ -15,10 +17,14 @@ export default function ProductDetail({ productId }: { productId: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(""); // 상품을 못 불러왔을 때 보여줄 안내 (예: 백엔드 서버가 꺼져 있음)
   const [quantity, setQuantity] = useState(1);
-  const [added, setAdded] = useState(false); // 장바구니에 담았다는 안내를 보여줄지
+  const [cartMessage, setCartMessage] = useState(""); // 장바구니 담기 결과 안내
+  const [cartError, setCartError] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [alertMessage, setAlertMessage] = useState(""); // 재입고 알림 신청 결과 안내
   const [alertLoading, setAlertLoading] = useState(false);
+  const { user } = useAuth();
   const { addItem } = useCart();
+  const router = useRouter();
 
   useEffect(() => {
     getProduct(productId)
@@ -60,31 +66,47 @@ export default function ProductDetail({ productId }: { productId: number }) {
 
   const soldOut = product.stockStatus === "SOLD_OUT";
 
-  function handleAddToCart() {
-    if (!product) return;
-    addItem(
-      { productId: product.id, name: product.name, price: product.price, stock: product.totalStock },
-      quantity
-    );
-    setAdded(true);
+  // 로그인하지 않았으면 로그인 화면으로 보냈다가, 로그인 후 이 상품으로 돌아온다
+  function goLogin() {
+    router.push(`/login?redirect=${encodeURIComponent(`/products/${productId}`)}`);
+  }
+
+  async function handleAddToCart() {
+    if (!user) return goLogin();
+    setAdding(true);
+    try {
+      await addItem(productId, quantity);
+      setCartError(false);
+      setCartMessage("장바구니에 담았습니다.");
+    } catch (err) {
+      setCartError(true);
+      setCartMessage(err instanceof Error ? err.message : "장바구니에 담지 못했습니다.");
+    } finally {
+      setAdding(false);
+    }
   }
 
   async function handleRestockAlert() {
-    if (!product) return;
+    if (!user) return goLogin();
     setAlertLoading(true);
     try {
-      await requestRestockAlert(product.id);
-      setAlertMessage("재입고되면 알려드릴게요.");
-    } catch (error) {
-      // 로그인하지 않은 경우 등
-      setAlertMessage(error instanceof Error ? error.message : "알림 신청에 실패했습니다.");
+      await requestRestockAlert(productId);
+      setAlertMessage("재입고되면 알려드릴게요. (마이페이지 > 재입고 알림 목록)");
+    } catch (err) {
+      setAlertMessage(err instanceof Error ? err.message : "알림 신청에 실패했습니다.");
     }
     setAlertLoading(false);
   }
 
   return (
-    <div className="grid gap-8 p-8 md:grid-cols-2">
-      <ProductImage imageUrl={product.imageUrl} name={product.name} className="rounded-lg" textSize="text-lg" />
+    <div className="grid gap-8 p-4 sm:p-8 md:grid-cols-2">
+      <ProductImage
+        imageUrl={product.imageUrl}
+        name={product.name}
+        categoryName={product.categoryName}
+        size="large"
+        className="rounded-lg"
+      />
 
       <div>
         <p className="text-sm text-gray-500">{product.categoryName}</p>
@@ -109,18 +131,13 @@ export default function ProductDetail({ productId }: { productId: number }) {
           ) : (
             <p className="mt-3 text-gray-600">현재 품절된 상품입니다.</p>
           )}
-
         </div>
 
         {/* 수량 선택 + 장바구니 담기 (품절이면 버튼 비활성화 + 재입고 알림 신청) */}
         {soldOut ? (
           <div className="mt-6">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled
-                className="cursor-not-allowed rounded bg-gray-300 px-6 py-2 text-white"
-              >
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled className="cursor-not-allowed rounded bg-gray-300 px-6 py-2 text-white">
                 품절
               </button>
               <button
@@ -135,31 +152,34 @@ export default function ProductDetail({ productId }: { productId: number }) {
             {alertMessage && <p className="mt-3 text-sm text-gray-700">{alertMessage}</p>}
           </div>
         ) : (
-          <div className="mt-6 flex items-center gap-4">
+          <div className="mt-6 flex flex-wrap items-center gap-4">
             <QuantitySelector
               value={quantity}
-              max={product.totalStock}
+              max={Math.min(product.totalStock, 99)}
               onChange={(value) => {
                 setQuantity(value);
-                setAdded(false);
+                setCartMessage("");
               }}
             />
             <button
               type="button"
               onClick={handleAddToCart}
-              className="rounded bg-blue-600 px-6 py-2 text-white hover:bg-blue-700"
+              disabled={adding}
+              className="rounded bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
             >
-              장바구니 담기
+              {adding ? "담는 중..." : "장바구니 담기"}
             </button>
           </div>
         )}
 
-        {added && (
-          <p className="mt-4 text-sm text-green-700">
-            장바구니에 담았습니다.{" "}
-            <Link href="/cart" className="underline">
-              장바구니 보기
-            </Link>
+        {cartMessage && (
+          <p className={`mt-4 text-sm ${cartError ? "text-red-600" : "text-green-700"}`}>
+            {cartMessage}{" "}
+            {!cartError && (
+              <Link href="/cart" className="underline">
+                장바구니 보기
+              </Link>
+            )}
           </p>
         )}
       </div>

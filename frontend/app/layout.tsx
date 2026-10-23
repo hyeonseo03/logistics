@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/common/AuthContext";
+import { ToastProvider } from "@/components/common/Toast";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,8 +26,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {/* 로그인 정보는 소비자/관리자 화면 모두에서 쓰므로 가장 바깥에 둔다 */}
-        <AuthProvider>{children}</AuthProvider>
+        {/* 로그인 정보와 알림은 소비자/관리자 화면 모두에서 쓰므로 가장 바깥에 둔다 */}
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

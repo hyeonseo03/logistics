@@ -14,12 +14,14 @@ export default function MyPage() {
   const [summary, setSummary] = useState<MyPageSummary | null>(null);
 
   useEffect(() => {
-    getMyPageSummary().then(setSummary);
+    getMyPageSummary()
+      .then(setSummary)
+      .catch(() => setSummary(null)); // 못 불러오면 숫자 대신 "-" 표시
   }, []);
 
   const cards = [
     { label: "배송중", count: summary?.shippingCount, href: "/mypage/shipments" },
-    { label: "취소/반품 진행", count: summary?.claimInProgressCount, href: "/mypage/returns" },
+    { label: "회수 진행", count: summary?.returningCount, href: "/mypage/returns" },
     { label: "재입고 알림", count: summary?.restockAlertCount, href: "/mypage/restock-alerts" },
   ];
 

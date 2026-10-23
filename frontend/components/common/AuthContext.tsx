@@ -4,12 +4,12 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import * as api from "@/lib/api";
-import type { User, UserRole } from "@/types/user";
+import type { User } from "@/types/user";
 
 interface AuthContextValue {
   user: User | null; // 로그인하지 않았으면 null
   loading: boolean; // 처음에 로그인 정보를 확인하는 중인지
-  login: (role: UserRole) => Promise<User>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>; // 내 정보를 수정한 뒤 최신 정보로 다시 불러온다
 }
@@ -20,16 +20,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 처음 화면이 열릴 때 이미 로그인되어 있는지 확인한다
+  // 처음 화면이 열릴 때 저장된 토큰으로 이미 로그인되어 있는지 확인한다
+  // (서버에 연결할 수 없으면 로그인 안 한 상태로 본다)
   useEffect(() => {
-    api.getCurrentUser().then((currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
+    api
+      .getCurrentUser()
+      .catch(() => null)
+      .then((currentUser) => {
+        setUser(currentUser);
+        setLoading(false);
+      });
   }, []);
 
-  async function login(role: UserRole) {
-    const loggedInUser = await api.login(role);
+  async function login(email: string, password: string) {
+    const loggedInUser = await api.login(email, password);
     setUser(loggedInUser);
     return loggedInUser;
   }
@@ -40,9 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function refreshUser() {
-    const currentUser = await api.getCurrentUser();
-    // 같은 객체를 돌려받아도 화면이 다시 그려지도록 복사해서 넣는다
-    setUser(currentUser ? { ...currentUser } : null);
+    setUser(await api.getCurrentUser());
   }
 
   return (

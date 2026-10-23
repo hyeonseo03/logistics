@@ -21,7 +21,7 @@
 
 | 누구나 | 로그인 필요 | ADMIN 만 |
 |---|---|---|
-| 회원가입·로그인, 상품·카테고리·물류센터·재고 **조회(GET)**, AI 도우미 | 장바구니, 주문, 배송 조회, 내 정보, 배송지 | `/api/admin/**` |
+| 회원가입·로그인, 상품·카테고리·물류센터·재고 **조회(GET)**, AI 도우미 | 장바구니, 주문, 배송 조회, 내 정보, 배송지, 재입고 알림, 취소·회수 내역 | `/api/admin/**` |
 
 ---
 
@@ -57,6 +57,32 @@
 ```
 
 검사 규칙 (프론트 `lib/validation.ts` 와 같음): 이름 1~20자, 전화번호 `010-1234-5678`, 비밀번호 8자 이상.
+
+### 재입고 알림 (`restock_alerts`)
+
+| 메서드 | 주소 | 설명 |
+|---|---|---|
+| POST | `/api/products/{id}/restock-alerts` | 신청 (본문 없음). 이미 신청했으면 기존 신청을 그대로 돌려준다 |
+| GET | `/api/users/me/restock-alerts` | 내 알림 목록 (최근 신청이 위로) |
+| DELETE | `/api/users/me/restock-alerts/{id}` | 해제. 내 알림이 아니면 404 `RESTOCK_ALERT_NOT_FOUND`. 204 |
+
+```json
+{ "id": 1, "userId": 3, "productId": 9, "createdAt": "2026-10-23T10:00:00",
+  "product": { "...": "ProductResponse (현재 totalStock 포함 → 재입고 여부 표시)" } }
+```
+
+### 취소·회수 내역
+
+| 메서드 | 주소 | 설명 |
+|---|---|---|
+| GET | `/api/users/me/claims?type=CANCEL` | 취소 내역 (상태 `CANCELED` 주문 + 결제의 환불 사유·시각) |
+| GET | `/api/users/me/claims?type=RETURN` | 회수(반품) 내역 (상태 `RETURNING`/`RETURNED` 주문 + `returns` 의 사유·요청·완료 시각) |
+
+```json
+{ "orderId": 12, "type": "RETURN", "status": "IN_PROGRESS", "statusLabel": "회수중",
+  "reason": "고객 취소 요청", "requestedAt": "2026-10-23T12:30:00", "completedAt": null,
+  "order": { "...": "OrderResponse" } }
+```
 
 ### 배송지 (`user_addresses`)
 
@@ -100,7 +126,7 @@
 | DELETE | `/api/cart/items?productIds=1,2` | 선택 삭제 |
 | DELETE | `/api/cart` | 전체 비우기. 204 |
 
-변경 API 는 모두 바뀐 장바구니 전체를 돌려준다.
+변경 API 는 모두 바뀐 장바구니 전체를 돌려준다. 각 줄에는 이미지가 없을 때 쓸 `categoryName` 도 들어 있다.
 
 ```json
 {
@@ -154,7 +180,7 @@
   "receiverName": "홍길동", "receiverPhone": "010-1111-2222", "address": "서울시 강남구 테헤란로 1",
   "createdAt": "2026-10-23T10:00:00",
   "items": [
-    { "id": 20, "orderId": 12, "productId": 3, "productName": "콜드브루 원액 1L",
+    { "id": 20, "orderId": 12, "productId": 3, "productName": "콜드브루 원액 1L", "imageUrl": null, "categoryName": "식품",
       "warehouseId": 1, "warehouseName": "서울 물류센터", "quantity": 2, "price": 10000, "lineTotal": 20000 }
   ],
   "shipment": {
@@ -268,6 +294,7 @@ SHIPPED, IN_TRANSIT, DELIVERED ─→ RETURNING(회수중) → RETURNED(회수�
 | PATCH | `/api/admin/orders/{id}/status` | 상태 변경 `{ "status": "PACKING" }` — `PACKING`, `SHIPPED`, `IN_TRANSIT`, `DELIVERED`, `RETURNED` 만 |
 | GET | `/api/admin/shipments?status=&page=0&size=20` | 배송 목록 (마지막 이력, 예상 도착, 지연 여부) |
 | GET | `/api/admin/users?page=0&size=20` | 회원 목록 (주문 수 포함) |
+| GET | `/api/admin/analytics` | 통계: 최근 14일 일별 주문·매출, 카테고리별 매출, 인기 상품 TOP 5, 센터별 출고 수량, 취소·회수 건수 |
 
 ```jsonc
 // POST/PUT /api/admin/products

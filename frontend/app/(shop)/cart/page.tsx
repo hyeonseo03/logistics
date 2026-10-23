@@ -1,70 +1,66 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import LoginRequired from "@/components/common/LoginRequired";
+import { useAuth } from "@/components/common/AuthContext";
 import { useCart } from "@/components/order/CartContext";
 import CartItemRow from "@/components/order/CartItemRow";
 import CartSummary from "@/components/order/CartSummary";
-import { getProductsByIds } from "@/lib/api";
-import type { ProductWithStock } from "@/types/product";
 
 export default function CartPage() {
+  const { user, loading: authLoading } = useAuth();
   const {
     items,
+    loading,
+    error,
     checkoutItems,
     checkoutPrice,
+    isSelected,
     updateQuantity,
     removeItems,
     toggleSelected,
     setAllSelected,
-    syncStock,
   } = useCart();
-  const [products, setProducts] = useState<ProductWithStock[]>([]); // 담긴 상품들의 최신 정보
-  const [stockError, setStockError] = useState(false); // 최신 재고를 못 불러왔는지 (예: 백엔드 서버가 꺼져 있음)
+  const [actionError, setActionError] = useState(""); // 삭제 실패 안내
 
-  // 담긴 상품 목록(id)이 바뀔 때마다 최신 재고·도착 예정일을 불러온다
-  // (수량만 바뀔 때는 다시 부르지 않도록 id 들을 문자열로 묶어서 비교한다)
-  const idsKey = items.map((item) => item.productId).join(",");
+  if (authLoading) return <p className="p-8 text-gray-500">불러오는 중...</p>;
+  if (!user) return <LoginRequired title="장바구니" />;
+  if (loading) return <p className="p-8 text-gray-500">장바구니를 불러오는 중...</p>;
 
-  useEffect(() => {
-    if (idsKey === "") return;
-    let ignore = false;
-
-    getProductsByIds(idsKey.split(",").map(Number))
-      .then((data) => {
-        if (ignore) return;
-        setProducts(data);
-        setStockError(false);
-        syncStock(data.map((p) => ({ productId: p.id, stock: p.totalStock })));
-      })
-      .catch(() => {
-        if (!ignore) setStockError(true);
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [idsKey, syncStock]);
+  if (error && items.length === 0) {
+    return (
+      <div className="p-4 sm:p-8">
+        <h1 className="text-2xl font-bold">장바구니</h1>
+        <p className="mt-6 rounded border border-red-200 bg-red-50 p-4 text-red-700">{error}</p>
+      </div>
+    );
+  }
 
   // 장바구니가 비었을 때
   if (items.length === 0) {
     return <EmptyCart />;
   }
 
-  const buyableItems = items.filter((item) => item.stock > 0); // 품절이 아닌 상품
-  const soldOutIds = items.filter((item) => item.stock === 0).map((item) => item.productId);
-  const selectedIds = items.filter((item) => item.selected).map((item) => item.productId);
-  const allSelected = buyableItems.length > 0 && buyableItems.every((item) => item.selected);
+  const buyableItems = items.filter((item) => !item.soldOut); // 품절이 아닌 상품
+  const soldOutIds = items.filter((item) => item.soldOut).map((item) => item.productId);
+  const selectedIds = buyableItems.filter((item) => isSelected(item.productId)).map((item) => item.productId);
+  const allSelected = buyableItems.length > 0 && selectedIds.length === buyableItems.length;
+
+  async function handleRemove(productIds: number[]) {
+    setActionError("");
+    try {
+      await removeItems(productIds);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "삭제하지 못했습니다.");
+    }
+  }
 
   return (
     <div className="p-4 sm:p-8">
       <h1 className="text-2xl font-bold">장바구니</h1>
 
-      {stockError && (
-        <p className="mt-4 rounded border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
-          재고 정보를 불러올 수 없습니다. 담은 상품의 재고·도착 예정일이 최신이 아닐 수 있어요.
-        </p>
-      )}
+      {actionError && <p className="mt-4 text-sm text-red-600">{actionError}</p>}
 
       {/* 모바일: 목록 아래에 결제 요약 / 큰 화면: 오른쪽에 결제 요약 */}
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -85,7 +81,7 @@ export default function CartPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => removeItems(selectedIds)}
+                onClick={() => handleRemove(selectedIds)}
                 disabled={selectedIds.length === 0}
                 className="rounded border px-3 py-1 hover:bg-gray-50 disabled:text-gray-300"
               >
@@ -94,7 +90,7 @@ export default function CartPage() {
               {soldOutIds.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => removeItems(soldOutIds)}
+                  onClick={() => handleRemove(soldOutIds)}
                   className="rounded border px-3 py-1 hover:bg-gray-50"
                 >
                   품절된 상품 삭제 ({soldOutIds.length})
@@ -114,10 +110,10 @@ export default function CartPage() {
               <CartItemRow
                 key={item.productId}
                 item={item}
-                product={products.find((p) => p.id === item.productId)}
+                selected={isSelected(item.productId)}
                 onToggle={() => toggleSelected(item.productId)}
                 onQuantityChange={(quantity) => updateQuantity(item.productId, quantity)}
-                onRemove={() => removeItems([item.productId])}
+                onRemove={() => handleRemove([item.productId])}
               />
             ))}
           </ul>

@@ -12,7 +12,7 @@ import java.util.Optional;
 public interface CartItemRepository extends JpaRepository<CartItem, Long> {
 
     // 상품 정보(이름, 가격)도 한 번의 SQL로 같이 가져온다. 먼저 담은 순서
-    @Query("select c from CartItem c join fetch c.product where c.user.id = :userId order by c.id")
+    @Query("select c from CartItem c join fetch c.product p join fetch p.category where c.user.id = :userId order by c.id")
     List<CartItem> findAllWithProductByUserId(Long userId);
 
     Optional<CartItem> findByUserIdAndProductId(Long userId, Long productId);

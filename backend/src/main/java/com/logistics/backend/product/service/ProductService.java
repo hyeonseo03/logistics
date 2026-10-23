@@ -12,6 +12,7 @@ import com.logistics.backend.product.dto.ProductRequest;
 import com.logistics.backend.product.dto.ProductResponse;
 import com.logistics.backend.product.entity.Product;
 import com.logistics.backend.product.repository.ProductRepository;
+import com.logistics.backend.product.repository.RestockAlertRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class ProductService {
     private final CategoryRepository categoryRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderItemRepository orderItemRepository;
+    private final RestockAlertRepository restockAlertRepository;
 
     public List<ProductResponse> getProducts(Long categoryId) {
         List<Product> products = (categoryId == null)
@@ -88,7 +90,7 @@ public class ProductService {
     }
 
     // 삭제: 주문된 적 있는 상품은 주문 내역이 깨지므로 지우지 않는다 (409)
-    // 주문 이력이 없으면 장바구니·재고 행을 먼저 지우고 상품을 지운다
+    // 주문 이력이 없으면 장바구니·재입고 알림·재고 행을 먼저 지우고 상품을 지운다
     @Transactional
     public void delete(Long id) {
         Product product = productRepository.findById(id)
@@ -97,6 +99,7 @@ public class ProductService {
             throw new BusinessException(ErrorCode.PRODUCT_IN_USE);
         }
         cartItemRepository.deleteAllByProductId(id);
+        restockAlertRepository.deleteAllByProductId(id);
         inventoryRepository.deleteAllByProductId(id);
         productRepository.delete(product);
     }

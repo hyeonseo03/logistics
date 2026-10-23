@@ -1,7 +1,7 @@
 import { shipmentStatusLabel, shipmentSteps } from "@/lib/labels";
 import type { ShipmentStatus } from "@/types/shipment";
 
-// 준비중 → 출고 → 운송중 → 배송완료 4단계 진행 표시
+// 상품준비 → 출고 → 배송중 → 배송완료 4단계 진행 표시 (취소·회수 주문에는 쓰지 않는다)
 export default function ShipmentTimeline({ status }: { status: ShipmentStatus }) {
   const currentIndex = shipmentSteps.indexOf(status);
 

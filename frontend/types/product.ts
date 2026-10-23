@@ -49,22 +49,33 @@ export interface ProductWithStock extends Product {
 // 상품 목록 정렬 방식
 export type ProductSort = "NEWEST" | "PRICE_ASC" | "PRICE_DESC" | "NAME";
 
-// 상품 목록 검색 조건 (나중에 GET /api/products 의 쿼리 파라미터가 된다)
+// 상품 목록 검색 조건 (categoryId 는 백엔드가 거르고, keyword·sort 는 lib/api.ts 에서 처리한다)
 export interface ProductSearchParams {
   keyword?: string;
   categoryId?: number;
   sort?: ProductSort;
 }
 
-// restock_alerts 테이블: 재입고 알림 신청
+// restock_alerts 테이블: 재입고 알림 신청 + 상품의 현재 정보
 export interface RestockAlert {
   id: number;
   userId: number; // users.id
   productId: number; // products.id
   createdAt: string;
+  product: ProductWithStock;
 }
 
-// 재입고 알림 목록 화면용 (restock_alerts + 상품의 현재 재고 상태)
-export interface RestockAlertWithProduct extends RestockAlert {
-  product: ProductWithStock;
+// 백엔드 재입고 알림 응답 (상품은 ProductResponse 로 온다. lib/api.ts 가 ProductWithStock 으로 바꾼다)
+export interface RestockAlertResponse extends Omit<RestockAlert, "product"> {
+  product: ProductResponse;
+}
+
+// 관리자 상품 등록/수정 요청 (POST/PUT /api/admin/products)
+export interface ProductRequest {
+  categoryId: number;
+  name: string;
+  description: string;
+  price: number;
+  optionName: string | null;
+  imageUrl: string | null; // 사진은 이미지 업로드 API 로 올리고, 수정할 때는 기존 값을 그대로 보낸다
 }

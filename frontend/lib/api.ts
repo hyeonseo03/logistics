@@ -1,60 +1,44 @@
 // 화면은 반드시 이 파일의 함수만 호출한다.
-// 지금은 mocks 데이터를 돌려주고, 나중에 백엔드가 생기면 함수 안쪽만 fetch 로 바꾼다.
-// (함수 이름, 받는 값, 돌려주는 타입은 그대로 유지한다)
+// 모든 함수는 백엔드(Spring Boot) REST API 를 호출한다. (API 목록: ../docs/API.md)
 
-import { addresses } from "@/mocks/addresses";
-import { categories } from "@/mocks/categories";
-import { orderClaims } from "@/mocks/orderClaims";
-import { orderItems } from "@/mocks/orderItems";
-import { orders } from "@/mocks/orders";
-import { products } from "@/mocks/products";
-import { restockAlerts } from "@/mocks/restockAlerts";
-import { shipmentEvents } from "@/mocks/shipmentEvents";
-import { shipments } from "@/mocks/shipments";
-import { userPasswords } from "@/mocks/userPasswords";
-import { users } from "@/mocks/users";
-import { warehouses } from "@/mocks/warehouses";
 import type {
-  AdminOrder,
   AdminShipment,
-  DailyOrderCount,
+  AdminUser,
+  Analytics,
   DashboardSummary,
   InventoryCell,
   InventoryRow,
   InventoryTable,
+  Page,
 } from "@/types/admin";
 import type { AiChatRequest, AiChatResponse } from "@/types/ai";
-import type { ClaimType, ClaimWithOrder } from "@/types/claim";
-import type {
-  CreateOrderRequest,
-  Order,
-  OrderItemWithProduct,
-  OrderStatus,
-  OrderWithDetails,
-} from "@/types/order";
+import type { Cart } from "@/types/cart";
+import type { Claim, ClaimType } from "@/types/claim";
+import type { CancelOrderResponse, CreateOrderRequest, Order, OrderStatus } from "@/types/order";
 import type {
   Category,
   Product,
+  ProductRequest,
+  ProductResponse,
   ProductSearchParams,
   ProductStock,
-  ProductResponse,
   ProductWithStock,
   RestockAlert,
-  RestockAlertWithProduct,
+  RestockAlertResponse,
 } from "@/types/product";
-import type { Shipment, ShipmentDetail, ShipmentStatus } from "@/types/shipment";
+import type { ShipmentStatus, Tracking } from "@/types/shipment";
 import type {
   Address,
   AddressRequest,
+  ChangePasswordRequest,
+  LoginResponse,
   MyPageSummary,
+  SignupRequest,
   UpdateProfileRequest,
   User,
-  UserRole,
 } from "@/types/user";
-import type { InventoryResponse, Warehouse } from "@/types/warehouse";
+import type { InventoryResponse, Warehouse, WarehouseRegion } from "@/types/warehouse";
 import { toDateKey } from "@/lib/format";
-import { getShippingFee } from "@/lib/price";
-import { orderStatusLabel, shipmentStatusLabel, shipmentSteps } from "@/lib/labels";
 import {
   LOW_STOCK_THRESHOLD,
   getAvailableQuantity,
@@ -63,80 +47,171 @@ import {
   getRegionFromAddress,
   getStockStatus,
 } from "@/lib/stock";
-import { isValidName, isValidPassword, isValidPhone } from "@/lib/validation";
 
-// 가짜 로그인: 로그인한 회원 id 를 브라우저 localStorage 에 저장한다
-// (나중에 백엔드가 생기면 이 자리에 로그인 토큰을 저장하게 된다)
-const SESSION_KEY = "logistics_user_id";
-
-function getSessionUserId(): number | null {
-  if (typeof window === "undefined") return null; // 서버에서 실행될 때는 localStorage 가 없다
-  const saved = localStorage.getItem(SESSION_KEY);
-  return saved ? Number(saved) : null;
-}
-
-// 로그인이 꼭 필요한 함수에서 사용한다
-function requireLogin(): User {
-  const user = users.find((u) => u.id === getSessionUserId());
-  if (!user) throw new Error("로그인이 필요합니다.");
-  return user;
-}
-
-// ───────── 실제 백엔드 호출 ─────────
+// ───────── 공통: 백엔드 호출 ─────────
 
 // 백엔드 주소. .env.local 의 NEXT_PUBLIC_API_URL 값을 쓰고, 없으면 localhost:8080
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-// 백엔드에 GET 요청을 보낸다.
-// 서버에 아예 연결이 안 되면 (서버 꺼짐, 주소 틀림, CORS 차단 등) 화면에 보여줄 한국어 메시지로 Error 를 던진다.
-async function fetchFromServer(path: string): Promise<Response> {
-  try {
-    // cache: "no-store" → 저장해 둔 응답을 쓰지 않고 항상 서버에서 최신 값을 받아온다 (재고는 자주 바뀐다)
-    return await fetch(API_URL + path, { cache: "no-store" });
-  } catch {
-    throw new Error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.");
+// 로그인 토큰(JWT)을 브라우저 localStorage 에 저장해 두고, 요청마다 Authorization 헤더로 보낸다
+const TOKEN_KEY = "logistics_token";
+
+function getToken(): string | null {
+  if (typeof window === "undefined") return null; // 서버에서 실행될 때는 localStorage 가 없다
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function clearToken() {
+  if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
+}
+
+// 백엔드 에러 응답 { code, message } 를 담는 에러. 화면에서는 error.message 를 그대로 보여주면 된다
+export class ApiError extends Error {
+  status: number; // HTTP 상태 코드 (서버에 연결조차 못 했으면 0)
+  code: string; // 예: "OUT_OF_STOCK", "DUPLICATE_EMAIL"
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
   }
 }
 
-// 백엔드에 GET 요청을 보내고 JSON 응답을 돌려준다. 서버가 에러(4xx, 5xx)를 돌려주면 Error 를 던진다.
-async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetchFromServer(path);
-  if (!response.ok) {
-    throw new Error(`서버 오류가 발생했습니다. (${response.status})`);
+// 백엔드에 요청을 보내고 JSON 응답을 돌려준다
+// - body 가 FormData 면 그대로(파일 업로드), 객체면 JSON 으로 보낸다
+// - 실패하면 ApiError 를 던진다 (메시지는 백엔드가 보낸 한국어 메시지)
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let payload: BodyInit | undefined;
+  if (body instanceof FormData) {
+    payload = body; // Content-Type 은 브라우저가 알아서 정한다 (multipart/form-data)
+  } else if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    payload = JSON.stringify(body);
   }
+
+  let response: Response;
+  try {
+    // cache: "no-store" → 저장해 둔 응답을 쓰지 않고 항상 서버에서 최신 값을 받아온다 (재고는 자주 바뀐다)
+    response = await fetch(API_URL + path, { method, headers, body: payload, cache: "no-store" });
+  } catch {
+    throw new ApiError(0, "NETWORK_ERROR", "서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.");
+  }
+
+  if (!response.ok) {
+    // 토큰이 만료되었거나 잘못되었으면 지운다 (다음 화면부터 로그인 안 한 상태가 된다)
+    if (response.status === 401 && token) clearToken();
+
+    let code = `HTTP_${response.status}`;
+    let message = `서버 오류가 발생했습니다. (${response.status})`;
+    try {
+      const error = await response.json();
+      code = error.code ?? code;
+      message = error.message ?? message;
+    } catch {
+      // 본문이 JSON 이 아니면 기본 메시지를 쓴다
+    }
+    throw new ApiError(response.status, code, message);
+  }
+
+  if (response.status === 204) return undefined as T; // 본문 없음 (삭제 등)
   return response.json();
 }
 
-// 실제 네트워크처럼 느껴지도록 300ms 기다린다
-function delay(ms = 300) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+const get = <T>(path: string) => request<T>("GET", path);
+const post = <T>(path: string, body?: unknown) => request<T>("POST", path, body);
+const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
+const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
+const del = <T>(path: string) => request<T>("DELETE", path);
+
+// 404 면 null 을 돌려준다 (상품·주문이 없을 때 "찾을 수 없습니다" 화면을 보여주기 위해)
+async function getOrNull<T>(path: string): Promise<T | null> {
+  try {
+    return await get<T>(path);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
-// 배열에서 가장 큰 id + 1 (DB 의 자동 증가 id 흉내)
-function nextId(rows: { id: number }[]) {
-  return rows.reduce((max, row) => Math.max(max, row.id), 0) + 1;
+// 상품 이미지 주소: 백엔드에 올린 사진은 "/uploads/..." 로 오므로 백엔드 주소를 붙인다
+export function imageSrc(imageUrl: string): string {
+  return imageUrl.startsWith("/") ? API_URL + imageUrl : imageUrl;
 }
 
-// 배송지 주소: 로그인했으면 그 회원의 기본 배송지, 아니면 기본 mock 회원(정현서, 서울)의 기본 배송지
-function getDeliveryAddress(): string {
-  const userId = getSessionUserId() ?? users[0].id;
-  const address =
-    addresses.find((a) => a.userId === userId && a.isDefault) ??
-    addresses.find((a) => a.userId === users[0].id && a.isDefault);
-  return address ? address.address : "서울";
+// ───────── 회원 / 로그인 ─────────
+
+// POST /api/auth/login → 토큰을 저장하고 회원 정보를 돌려준다
+export async function login(email: string, password: string): Promise<User> {
+  const response = await post<LoginResponse>("/api/auth/login", { email, password });
+  localStorage.setItem(TOKEN_KEY, response.accessToken);
+  return response.user;
+}
+
+// 로그아웃: JWT 는 서버에 저장하지 않으므로 브라우저에서 토큰만 지우면 된다
+export async function logout(): Promise<void> {
+  clearToken();
+}
+
+// POST /api/auth/signup (가입만 한다. 로그인은 login 을 따로 부른다)
+export async function signup(request: SignupRequest): Promise<User> {
+  return post<User>("/api/auth/signup", request);
+}
+
+// GET /api/auth/me. 로그인하지 않았거나 토큰이 만료되었으면 null
+export async function getCurrentUser(): Promise<User | null> {
+  if (!getToken()) return null;
+  try {
+    return await get<User>("/api/auth/me");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return null;
+    throw error;
+  }
+}
+
+// ───────── 카테고리 / 상품 ─────────
+
+// GET /api/categories
+export async function getCategories(): Promise<Category[]> {
+  return get<Category[]>("/api/categories");
+}
+
+// 예상 도착일 계산에 쓸 배송지 지역: 로그인했으면 기본 배송지, 아니면(또는 배송지가 없으면) 서울
+async function getDeliveryRegion(): Promise<WarehouseRegion> {
+  if (!getToken()) return "SEOUL";
+  try {
+    const addresses = await getMyAddresses();
+    const address = addresses.find((a) => a.isDefault);
+    return address ? getRegionFromAddress(address.address) : "SEOUL";
+  } catch {
+    return "SEOUL";
+  }
 }
 
 // 상품 1개에 물류센터별 재고, 출고 센터, 예상 도착일을 붙인다
 // - 재고 합계(totalStock)는 백엔드가 계산해 준 값을 쓰고, 재고 상태는 lib/stock.ts 규칙으로 판단한다
-// - 출고 센터·도착일은 백엔드에서 받은 재고 목록(inventories)과 물류센터 목록(warehouseList)으로 계산한다
-function addStockInfo(
-  product: Product,
-  categoryName: string,
-  totalStock: number,
+// - 출고 센터·도착일은 백엔드에서 받은 재고 목록과 물류센터 목록으로 계산한다
+function toProductWithStock(
+  response: ProductResponse,
   inventories: InventoryResponse[],
-  warehouseList: Warehouse[]
+  warehouseList: Warehouse[],
+  destinationRegion: WarehouseRegion
 ): ProductWithStock {
-  const destinationRegion = getRegionFromAddress(getDeliveryAddress());
+  // 백엔드는 createdAt 을 시간대 없이 보낸다 ("2026-08-05T09:00:00", 한국 시간). 정렬이 정확하도록 +09:00 을 붙인다
+  const hasTimeZone = response.createdAt.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(response.createdAt);
+  const product: Product = {
+    id: response.id,
+    categoryId: response.categoryId,
+    name: response.name,
+    description: response.description,
+    price: response.price,
+    optionName: response.optionName,
+    imageUrl: response.imageUrl,
+    createdAt: hasTimeZone ? response.createdAt : response.createdAt + "+09:00",
+  };
 
   // 1. 이 상품을 취급하는 물류센터별 판매가능재고
   const rows: { warehouse: Warehouse; availableQuantity: number }[] = [];
@@ -144,17 +219,13 @@ function addStockInfo(
     if (row.productId !== product.id) continue;
     const warehouse = warehouseList.find((w) => w.id === row.warehouseId);
     if (!warehouse) continue;
-    rows.push({
-      warehouse,
-      availableQuantity: getAvailableQuantity(row.quantity, row.reservedQuantity),
-    });
+    rows.push({ warehouse, availableQuantity: getAvailableQuantity(row.quantity, row.reservedQuantity) });
   }
 
   // 2. 배송지에서 가까운 센터가 앞에 오도록 정렬
   rows.sort(
     (a, b) =>
-      getDistanceRank(destinationRegion, a.warehouse.region) -
-      getDistanceRank(destinationRegion, b.warehouse.region)
+      getDistanceRank(destinationRegion, a.warehouse.region) - getDistanceRank(destinationRegion, b.warehouse.region)
   );
 
   const stocks: ProductStock[] = rows.map((row) => ({
@@ -167,107 +238,35 @@ function addStockInfo(
 
   return {
     ...product,
-    categoryName,
+    categoryName: response.categoryName,
     stocks,
-    totalStock,
-    stockStatus: getStockStatus(totalStock),
-    shippingWarehouse: shippingRow
-      ? stocks.find((stock) => stock.warehouseId === shippingRow.warehouse.id)!
-      : null,
+    totalStock: response.totalStock,
+    stockStatus: getStockStatus(response.totalStock),
+    shippingWarehouse: shippingRow ? stocks.find((s) => s.warehouseId === shippingRow.warehouse.id)! : null,
     sameDayShipping: shippingRow ? shippingRow.warehouse.sameDayShipping : false,
     estimatedArrivalDate: shippingRow
       ? toDateKey(
-          getEstimatedArrivalDate(
-            shippingRow.warehouse.region,
-            shippingRow.warehouse.sameDayShipping,
-            destinationRegion
-          )
+          getEstimatedArrivalDate(shippingRow.warehouse.region, shippingRow.warehouse.sameDayShipping, destinationRegion)
         )
       : null,
   };
 }
 
-// 주문 1건의 주문 상품 목록에 상품 이름을 붙인다
-function getOrderItems(orderId: number): OrderItemWithProduct[] {
-  return orderItems
-    .filter((item) => item.orderId === orderId)
-    .map((item) => {
-      const product = products.find((p) => p.id === item.productId);
-      return { ...item, productName: product ? product.name : "(삭제된 상품)" };
-    });
-}
-
-// ───────── 회원 / 로그인 ─────────
-
-// 나중에: POST /api/auth/login
-// 지금은 역할(고객/관리자)만 고르면 그 역할의 첫 번째 회원으로 로그인된다
-export async function login(role: UserRole): Promise<User> {
-  await delay();
-  const user = users.find((u) => u.role === role);
-  if (!user) throw new Error("해당 역할의 회원이 없습니다.");
-  localStorage.setItem(SESSION_KEY, String(user.id));
-  return user;
-}
-
-// 나중에: POST /api/auth/logout
-export async function logout(): Promise<void> {
-  await delay();
-  localStorage.removeItem(SESSION_KEY);
-}
-
-// 나중에: GET /api/users/me
-// 로그인하지 않았으면 null
-export async function getCurrentUser(): Promise<User | null> {
-  await delay();
-  return users.find((u) => u.id === getSessionUserId()) ?? null;
-}
-
-// ───────── 카테고리 / 상품 ─────────
-
-// 나중에: GET /api/categories
-export async function getCategories(): Promise<Category[]> {
-  await delay();
-  return categories;
-}
-
-// 백엔드 상품 응답을 화면용 ProductWithStock 으로 바꾼다
-// - 상품 정보(이름, 가격, 카테고리 이름, 재고 합계)는 백엔드 값을 쓴다
-// - 출고 센터·도착일은 백엔드 재고 목록 + 물류센터 목록으로 계산한다
-function fromProductResponse(
-  response: ProductResponse,
-  inventories: InventoryResponse[],
-  warehouseList: Warehouse[]
-): ProductWithStock {
-  // 백엔드는 createdAt 을 시간대 없이 보낸다 ("2026-08-05T09:00:00").
-  // mock 데이터와 같은 모양이 되도록 한국 시간(+09:00)을 붙인다. 이미 시간대가 있으면 그대로 둔다.
-  const hasTimeZone = response.createdAt.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(response.createdAt);
-  const createdAt = hasTimeZone ? response.createdAt : response.createdAt + "+09:00";
-
-  const product: Product = {
-    id: response.id,
-    categoryId: response.categoryId,
-    name: response.name,
-    description: response.description,
-    price: response.price,
-    optionName: response.optionName,
-    imageUrl: response.imageUrl,
-    createdAt,
-  };
-  return addStockInfo(product, response.categoryName, response.totalStock, inventories, warehouseList);
-}
-
-// [백엔드 연결됨] GET /api/products?categoryId=...
-// 백엔드는 아직 categoryId 필터만 지원한다.
-// 검색어(keyword)와 정렬(sort)은 백엔드에 생길 때까지 여기서 처리한다.
-export async function getProducts(params: ProductSearchParams = {}): Promise<ProductWithStock[]> {
-  const path = params.categoryId ? `/api/products?categoryId=${params.categoryId}` : "/api/products";
-  // 상품, 재고, 물류센터를 동시에 요청하고 셋 다 도착할 때까지 기다린다
-  const [responses, inventories, warehouseList] = await Promise.all([
-    apiGet<ProductResponse[]>(path),
+// 상품 응답 여러 개를 화면용으로 바꾼다 (재고·물류센터·배송지 지역을 한 번씩만 불러온다)
+async function toProductsWithStock(responses: ProductResponse[]): Promise<ProductWithStock[]> {
+  const [inventories, warehouseList, region] = await Promise.all([
     getInventories(),
     getWarehouses(),
+    getDeliveryRegion(),
   ]);
-  let result = responses.map((response) => fromProductResponse(response, inventories, warehouseList));
+  return responses.map((response) => toProductWithStock(response, inventories, warehouseList, region));
+}
+
+// GET /api/products?categoryId=...
+// 검색어(keyword)와 정렬(sort)은 상품 수가 많지 않아 여기서 처리한다.
+export async function getProducts(params: ProductSearchParams = {}): Promise<ProductWithStock[]> {
+  const path = params.categoryId ? `/api/products?categoryId=${params.categoryId}` : "/api/products";
+  let result = await toProductsWithStock(await get<ProductResponse[]>(path));
 
   // 검색어: 상품 이름에 포함되어 있는지
   const keyword = params.keyword?.trim();
@@ -287,584 +286,249 @@ export async function getProducts(params: ProductSearchParams = {}): Promise<Pro
   return result;
 }
 
-// [백엔드 연결됨] GET /api/products/{id}
-// 상품이 없으면 (백엔드가 404 를 돌려주면) null 을 돌려준다
+// GET /api/products/{id}. 상품이 없으면 null
 export async function getProduct(id: number): Promise<ProductWithStock | null> {
-  const response = await fetchFromServer(`/api/products/${id}`);
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`서버 오류가 발생했습니다. (${response.status})`);
-  }
-  const data: ProductResponse = await response.json();
+  const response = await getOrNull<ProductResponse>(`/api/products/${id}`);
+  if (!response) return null;
 
-  const [inventories, warehouseList] = await Promise.all([getProductInventories(id), getWarehouses()]);
-  return fromProductResponse(data, inventories, warehouseList);
-}
-
-// [백엔드 연결됨] GET /api/products 전체를 받아서 ids 에 있는 상품만 고른다
-// (나중에 백엔드에 GET /api/products?ids=1,2,3 이 생기면 바꾼다)
-// 장바구니 화면용: 담긴 상품들의 최신 재고·출고 센터·도착일·이미지를 한 번에 가져온다
-// 없는(삭제된) 상품은 결과에서 빠진다
-export async function getProductsByIds(ids: number[]): Promise<ProductWithStock[]> {
-  const all = await getProducts();
-  return all.filter((p) => ids.includes(p.id));
+  const [inventories, warehouseList, region] = await Promise.all([
+    get<InventoryResponse[]>(`/api/products/${id}/inventories`),
+    getWarehouses(),
+    getDeliveryRegion(),
+  ]);
+  return toProductWithStock(response, inventories, warehouseList, region);
 }
 
 // ───────── 물류센터 / 재고 ─────────
 
-// [백엔드 연결됨] GET /api/warehouses
+// GET /api/warehouses
 export async function getWarehouses(): Promise<Warehouse[]> {
-  return apiGet<Warehouse[]>("/api/warehouses");
+  return get<Warehouse[]>("/api/warehouses");
 }
 
-// [백엔드 연결됨] GET /api/inventories
-// 모든 상품 × 물류센터의 재고 목록 (관리자 재고 화면, 상품 목록의 출고 센터 계산에 쓴다)
+// GET /api/inventories (모든 상품 × 물류센터의 재고 목록. 상품 목록의 출고 센터 계산에 쓴다)
 export async function getInventories(): Promise<InventoryResponse[]> {
-  return apiGet<InventoryResponse[]>("/api/inventories");
+  return get<InventoryResponse[]>("/api/inventories");
 }
 
-// [백엔드 연결됨] GET /api/products/{id}/inventories
-// 상품 1개의 물류센터별 재고 목록 (없는 상품이면 서버가 404 → Error)
-export async function getProductInventories(productId: number): Promise<InventoryResponse[]> {
-  return apiGet<InventoryResponse[]>(`/api/products/${productId}/inventories`);
+// ───────── 재입고 알림 ─────────
+
+// POST /api/products/{id}/restock-alerts (로그인 필요. 이미 신청했으면 기존 신청을 그대로 돌려준다)
+export async function requestRestockAlert(productId: number): Promise<void> {
+  await post<RestockAlertResponse>(`/api/products/${productId}/restock-alerts`);
 }
 
-// 나중에: POST /api/products/{id}/restock-alerts
-// 품절 상품의 재입고 알림을 신청한다. 이미 신청했으면 기존 신청을 그대로 돌려준다.
-export async function requestRestockAlert(productId: number): Promise<RestockAlert> {
-  await delay();
-  const user = requireLogin();
+// GET /api/users/me/restock-alerts (최근 신청이 위로)
+export async function getMyRestockAlerts(): Promise<RestockAlert[]> {
+  const alerts = await get<RestockAlertResponse[]>("/api/users/me/restock-alerts");
+  const products = await toProductsWithStock(alerts.map((alert) => alert.product));
+  return alerts.map((alert, index) => ({ ...alert, product: products[index] }));
+}
 
-  if (!products.some((p) => p.id === productId)) {
-    throw new Error("존재하지 않는 상품입니다.");
-  }
+// DELETE /api/users/me/restock-alerts/{id}
+export async function deleteRestockAlert(alertId: number): Promise<void> {
+  await del<void>(`/api/users/me/restock-alerts/${alertId}`);
+}
 
-  const existing = restockAlerts.find((a) => a.userId === user.id && a.productId === productId);
-  if (existing) return existing;
+// ───────── 장바구니 (로그인 필요. 서버 cart_items 테이블에 저장된다) ─────────
+// 바꾸는 API 는 모두 바뀐 장바구니 전체를 돌려준다
 
-  const alert: RestockAlert = {
-    id: nextId(restockAlerts),
-    userId: user.id,
-    productId,
-    createdAt: new Date().toISOString(),
-  };
-  restockAlerts.push(alert);
-  return alert;
+// GET /api/cart
+export async function getCart(): Promise<Cart> {
+  return get<Cart>("/api/cart");
+}
+
+// POST /api/cart/items (이미 담긴 상품이면 수량을 더한다. 재고보다 많으면 409)
+export async function addCartItem(productId: number, quantity: number): Promise<Cart> {
+  return post<Cart>("/api/cart/items", { productId, quantity });
+}
+
+// PATCH /api/cart/items/{productId}
+export async function updateCartQuantity(productId: number, quantity: number): Promise<Cart> {
+  return patch<Cart>(`/api/cart/items/${productId}`, { quantity });
+}
+
+// DELETE /api/cart/items?productIds=1,2
+export async function removeCartItems(productIds: number[]): Promise<Cart> {
+  return del<Cart>(`/api/cart/items?productIds=${productIds.join(",")}`);
 }
 
 // ───────── 주문 ─────────
 
-// 나중에: POST /api/orders
-// 주문(orders) + 주문 상품(order_items) + 배송(shipments) + 첫 배송 이력(shipment_events)을 만든다.
-// 주의: mock 데이터는 브라우저 메모리에만 저장되므로 새로고침하면 사라진다.
+// POST /api/orders: 장바구니에서 고른 상품으로 주문 (재고 예약 + 모의 결제가 한 번에 처리된다)
 export async function createOrder(request: CreateOrderRequest): Promise<Order> {
-  await delay();
-  const user = requireLogin();
-
-  if (request.items.length === 0) {
-    throw new Error("주문할 상품이 없습니다.");
-  }
-
-  // 1. 상품 확인 + 재고 확인 + 총 금액 계산 (가격은 화면이 아니라 여기서 계산한다)
-  // 상품 정보와 재고는 백엔드에서 최신 값을 받아온다
-  const orderedProducts = await getProductsByIds(request.items.map((item) => item.productId));
-  let totalPrice = 0;
-  for (const item of request.items) {
-    const product = orderedProducts.find((p) => p.id === item.productId);
-    if (!product) {
-      throw new Error("존재하지 않는 상품이 있습니다.");
-    }
-    if (item.quantity > product.totalStock) {
-      throw new Error(`${product.name}의 재고가 부족합니다. (남은 수량: ${product.totalStock}개)`);
-    }
-    totalPrice += product.price * item.quantity;
-  }
-  // 배송비 (상품금액이 무료배송 기준보다 적으면 추가)
-  totalPrice += getShippingFee(totalPrice);
-
-  const now = new Date().toISOString();
-
-  // 2. orders
-  const order: Order = {
-    id: nextId(orders),
-    userId: user.id,
-    status: "PAID",
-    paymentMethod: request.paymentMethod,
-    totalPrice,
-    receiverName: request.receiverName,
-    receiverPhone: request.receiverPhone,
-    address: request.address,
-    createdAt: now,
-  };
-  orders.push(order);
-
-  // 3. order_items
-  for (const item of request.items) {
-    const product = orderedProducts.find((p) => p.id === item.productId)!;
-    orderItems.push({
-      id: nextId(orderItems),
-      orderId: order.id,
-      productId: item.productId,
-      quantity: item.quantity,
-      price: product.price,
-    });
-  }
-
-  // 4. shipments: 첫 번째 상품의 출고 센터(배송지에서 가장 가까운 재고 있는 센터)에서 출고한다 (단순화한 규칙)
-  const firstProduct = orderedProducts.find((p) => p.id === request.items[0].productId)!;
-  const shippingWarehouse = firstProduct.shippingWarehouse!; // 위에서 재고를 확인했으므로 항상 있다
-  const warehouseId = shippingWarehouse.warehouseId;
-  const shipmentId = nextId(shipments);
-  shipments.push({
-    id: shipmentId,
-    orderId: order.id,
-    warehouseId,
-    courier: "CJ대한통운",
-    trackingNumber: null,
-    status: "PREPARING",
-    shippedAt: null,
-    deliveredAt: null,
-  });
-
-  // 5. shipment_events: 첫 배송 이력
-  shipmentEvents.push({
-    id: nextId(shipmentEvents),
-    shipmentId,
-    status: "PREPARING",
-    location: shippingWarehouse.warehouseName,
-    description: "주문이 접수되어 상품을 준비하고 있습니다.",
-    occurredAt: now,
-  });
-
-  return order;
+  return post<Order>("/api/orders", request);
 }
 
-// 나중에: GET /api/orders/me
-// 로그인한 회원의 주문 목록 (최신 주문이 위로)
-export async function getMyOrders(): Promise<OrderWithDetails[]> {
-  await delay();
-  const user = requireLogin();
+// GET /api/orders (최신 주문이 위로)
+export async function getMyOrders(): Promise<Order[]> {
+  return get<Order[]>("/api/orders");
+}
 
-  return orders
-    .filter((order) => order.userId === user.id)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map((order) => ({
-      ...order,
-      items: getOrderItems(order.id),
-      shipment: shipments.find((s) => s.orderId === order.id) ?? null,
-    }));
+// POST /api/orders/{id}/cancel
+// 출고 전이면 즉시 취소, 출고 후면 회수 요청, 이미 처리된 주문이면 아무 일도 하지 않는다
+export async function cancelOrder(orderId: number, reason?: string): Promise<CancelOrderResponse> {
+  return post<CancelOrderResponse>(`/api/orders/${orderId}/cancel`, reason ? { reason } : undefined);
 }
 
 // ───────── 배송 ─────────
 
-// 나중에: GET /api/shipments/{id}
-// 배송이 없으면 null (백엔드에서는 404)
-export async function getShipment(id: number): Promise<ShipmentDetail | null> {
-  await delay();
-
-  const shipment = shipments.find((s) => s.id === id);
-  if (!shipment) return null;
-
-  const order = orders.find((o) => o.id === shipment.orderId);
-  if (!order) return null;
-
-  const warehouse = warehouses.find((w) => w.id === shipment.warehouseId);
-  const events = shipmentEvents
-    .filter((e) => e.shipmentId === shipment.id)
-    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
-
-  return {
-    ...shipment,
-    warehouseName: warehouse ? warehouse.name : "",
-    events,
-    order,
-    items: getOrderItems(order.id),
-  };
+// GET /api/orders/{id}/tracking: 배송 타임라인 + 도착 예상 시각. 내 주문이 아니거나 없으면 null
+export async function getTracking(orderId: number): Promise<Tracking | null> {
+  return getOrNull<Tracking>(`/api/orders/${orderId}/tracking`);
 }
 
 // ───────── 마이페이지 ─────────
 
-// 나중에: GET /api/users/me/summary
+// 마이페이지 요약 카드: 내 주문 목록 + 재입고 알림 목록으로 센다
 export async function getMyPageSummary(): Promise<MyPageSummary> {
-  await delay();
-  const user = requireLogin();
-
+  const [orders, alerts] = await Promise.all([
+    getMyOrders(),
+    get<RestockAlertResponse[]>("/api/users/me/restock-alerts"),
+  ]);
   return {
-    shippingCount: orders.filter((o) => o.userId === user.id && o.status === "SHIPPING").length,
-    claimInProgressCount: orderClaims.filter(
-      (c) => c.userId === user.id && (c.status === "REQUESTED" || c.status === "IN_PROGRESS")
-    ).length,
-    restockAlertCount: restockAlerts.filter((a) => a.userId === user.id).length,
+    shippingCount: orders.filter((o) => o.status === "SHIPPED" || o.status === "IN_TRANSIT").length,
+    returningCount: orders.filter((o) => o.status === "RETURNING").length,
+    restockAlertCount: alerts.length,
   };
 }
 
-// 나중에: GET /api/users/me/claims?types=CANCEL (취소) / ?types=RETURN,EXCHANGE (반품·교환)
-// 최근 신청이 위로
-export async function getMyClaims(types: ClaimType[]): Promise<ClaimWithOrder[]> {
-  await delay();
-  const user = requireLogin();
-
-  const result: ClaimWithOrder[] = [];
-  for (const claim of orderClaims) {
-    if (claim.userId !== user.id || !types.includes(claim.type)) continue;
-    const order = orders.find((o) => o.id === claim.orderId);
-    if (!order) continue;
-    result.push({ ...claim, order, items: getOrderItems(order.id) });
-  }
-  return result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-// 나중에: GET /api/users/me/restock-alerts
-export async function getMyRestockAlerts(): Promise<RestockAlertWithProduct[]> {
-  await delay();
-  const user = requireLogin();
-
-  // 상품의 현재 재고 상태는 백엔드에서 받아온다
-  const myAlerts = restockAlerts.filter((a) => a.userId === user.id);
-  const alertProducts = await getProductsByIds(myAlerts.map((a) => a.productId));
-
-  const result: RestockAlertWithProduct[] = [];
-  for (const alert of myAlerts) {
-    const product = alertProducts.find((p) => p.id === alert.productId);
-    if (!product) continue;
-    result.push({ ...alert, product });
-  }
-  return result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-// 나중에: DELETE /api/users/me/restock-alerts/{id}
-export async function deleteRestockAlert(alertId: number): Promise<void> {
-  await delay();
-  const user = requireLogin();
-
-  const index = restockAlerts.findIndex((a) => a.id === alertId && a.userId === user.id);
-  if (index === -1) throw new Error("알림 신청 내역을 찾을 수 없습니다.");
-  restockAlerts.splice(index, 1);
+// GET /api/users/me/claims?type=CANCEL (취소 내역) / RETURN (회수 내역). 최근 신청이 위로
+export async function getMyClaims(type: ClaimType): Promise<Claim[]> {
+  return get<Claim[]>(`/api/users/me/claims?type=${type}`);
 }
 
 // ───────── 내 정보 ─────────
 
-// 나중에: POST /api/users/me/verify-password
-// 비밀번호가 틀리면 에러 (백엔드에서는 401. 맞으면 잠깐 동안만 쓸 수 있는 확인 토큰을 발급한다)
+// POST /api/users/me/verify-password (틀리면 401 → "비밀번호가 일치하지 않습니다.")
 export async function verifyPassword(password: string): Promise<void> {
-  await delay();
-  const user = requireLogin();
-
-  const saved = userPasswords.find((p) => p.userId === user.id);
-  if (!saved || saved.password !== password) {
-    throw new Error("비밀번호가 일치하지 않습니다.");
-  }
+  await post<void>("/api/users/me/verify-password", { password });
 }
 
-// 나중에: PATCH /api/users/me
-// 이름, 전화번호, (선택) 비밀번호를 바꾼다. 이메일은 바꿀 수 없다.
+// PUT /api/users/me (이름, 전화번호)
 export async function updateMyProfile(request: UpdateProfileRequest): Promise<User> {
-  await delay();
-  const user = requireLogin();
+  return put<User>("/api/users/me", request);
+}
 
-  // 화면에서 검사했더라도 서버에서 한 번 더 검사한다
-  if (!isValidName(request.name)) throw new Error("이름을 1~20자로 입력해 주세요.");
-  if (!isValidPhone(request.phone)) throw new Error("전화번호 형식이 올바르지 않습니다.");
-  if (request.newPassword !== undefined && !isValidPassword(request.newPassword)) {
-    throw new Error("비밀번호는 8자 이상이어야 합니다.");
-  }
-
-  user.name = request.name.trim();
-  user.phone = request.phone;
-
-  if (request.newPassword !== undefined) {
-    const saved = userPasswords.find((p) => p.userId === user.id);
-    if (saved) saved.password = request.newPassword;
-  }
-  return user;
+// PATCH /api/users/me/password (현재 비밀번호가 틀리면 401)
+export async function changePassword(request: ChangePasswordRequest): Promise<void> {
+  await patch<void>("/api/users/me/password", request);
 }
 
 // ───────── 배송지 ─────────
 
-// 배송지 입력값 검사 (추가/수정 공통)
-function checkAddressRequest(request: AddressRequest) {
-  if (!request.label.trim()) throw new Error("배송지 이름을 입력해 주세요.");
-  if (!isValidName(request.receiverName)) throw new Error("받는 사람을 1~20자로 입력해 주세요.");
-  if (!isValidPhone(request.receiverPhone)) throw new Error("전화번호 형식이 올바르지 않습니다.");
-  if (!request.address.trim()) throw new Error("주소를 입력해 주세요.");
-}
-
-// 이 회원의 기본 배송지를 addressId 하나로 바꾼다 (나머지는 기본 해제)
-function makeDefault(userId: number, addressId: number) {
-  for (const address of addresses) {
-    if (address.userId === userId) address.isDefault = address.id === addressId;
-  }
-}
-
-// 나중에: GET /api/users/me/addresses
-// 기본 배송지가 맨 위, 나머지는 등록한 순서
+// GET /api/users/me/addresses (기본 배송지가 맨 위)
 export async function getMyAddresses(): Promise<Address[]> {
-  await delay();
-  const user = requireLogin();
-
-  return addresses
-    .filter((a) => a.userId === user.id)
-    .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.id - b.id);
+  return get<Address[]>("/api/users/me/addresses");
 }
 
-// 나중에: POST /api/users/me/addresses
-// 첫 배송지는 자동으로 기본 배송지가 된다
+// POST /api/users/me/addresses (첫 배송지는 자동으로 기본 배송지가 된다)
 export async function createAddress(request: AddressRequest): Promise<Address> {
-  await delay();
-  const user = requireLogin();
-  checkAddressRequest(request);
-
-  const isFirst = !addresses.some((a) => a.userId === user.id);
-  const address: Address = {
-    id: nextId(addresses),
-    userId: user.id,
-    label: request.label.trim(),
-    receiverName: request.receiverName.trim(),
-    receiverPhone: request.receiverPhone,
-    address: request.address.trim(),
-    isDefault: false,
-  };
-  addresses.push(address);
-  if (request.isDefault || isFirst) makeDefault(user.id, address.id);
-  return address;
+  return post<Address>("/api/users/me/addresses", request);
 }
 
-// 나중에: PUT /api/users/me/addresses/{id}
-// 기본 배송지 해제는 여기서 하지 않는다 (다른 배송지를 기본으로 설정하면 자동으로 해제된다)
+// PUT /api/users/me/addresses/{id}
 export async function updateAddress(addressId: number, request: AddressRequest): Promise<Address> {
-  await delay();
-  const user = requireLogin();
-  checkAddressRequest(request);
-
-  const address = addresses.find((a) => a.id === addressId && a.userId === user.id);
-  if (!address) throw new Error("배송지를 찾을 수 없습니다.");
-
-  address.label = request.label.trim();
-  address.receiverName = request.receiverName.trim();
-  address.receiverPhone = request.receiverPhone;
-  address.address = request.address.trim();
-  if (request.isDefault) makeDefault(user.id, address.id);
-  return address;
+  return put<Address>(`/api/users/me/addresses/${addressId}`, request);
 }
 
-// 나중에: PATCH /api/users/me/addresses/{id}/default
+// PATCH /api/users/me/addresses/{id}/default
 export async function setDefaultAddress(addressId: number): Promise<void> {
-  await delay();
-  const user = requireLogin();
-
-  if (!addresses.some((a) => a.id === addressId && a.userId === user.id)) {
-    throw new Error("배송지를 찾을 수 없습니다.");
-  }
-  makeDefault(user.id, addressId);
+  await patch<Address>(`/api/users/me/addresses/${addressId}/default`, {});
 }
 
-// 나중에: DELETE /api/users/me/addresses/{id}
-// 기본 배송지를 지우면 남은 배송지 중 가장 먼저 등록한 것이 기본 배송지가 된다
+// DELETE /api/users/me/addresses/{id} (기본 배송지를 지우면 가장 먼저 등록한 배송지가 기본이 된다)
 export async function deleteAddress(addressId: number): Promise<void> {
-  await delay();
-  const user = requireLogin();
-
-  const index = addresses.findIndex((a) => a.id === addressId && a.userId === user.id);
-  if (index === -1) throw new Error("배송지를 찾을 수 없습니다.");
-
-  const wasDefault = addresses[index].isDefault;
-  addresses.splice(index, 1);
-
-  if (wasDefault) {
-    const next = addresses.find((a) => a.userId === user.id);
-    if (next) makeDefault(user.id, next.id);
-  }
+  await del<void>(`/api/users/me/addresses/${addressId}`);
 }
 
 // ───────── AI 도우미 ─────────
 
-// 나중에: POST /api/ai/chat
-// 지금은 진짜 AI 가 아니라, 정해진 규칙으로 답하는 가짜 AI 다. (1초 뒤 답변)
+// POST /api/assistant/chat (로그인했으면 토큰이 함께 가서 내 주문 기준으로 답한다)
 export async function askAi(request: AiChatRequest): Promise<AiChatResponse> {
-  await delay(1000);
-
-  // "배송" 이라는 단어가 없으면 안내 문구로 답한다
-  if (!request.message.includes("배송")) {
-    return {
-      reply:
-        "죄송해요, 지금은 배송 관련 질문만 답변할 수 있어요.\n예: \"내 배송 어디쯤이야?\"",
-    };
-  }
-
-  const user = users.find((u) => u.id === getSessionUserId());
-  if (!user) {
-    return { reply: "로그인하시면 주문하신 상품의 배송 현황을 알려드릴게요." };
-  }
-
-  const myOrders = orders
-    .filter((order) => order.userId === user.id)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-  if (myOrders.length === 0) {
-    return { reply: `${user.name}님은 아직 주문하신 상품이 없어요.` };
-  }
-
-  // 주문마다 한 줄씩: 주문 번호, 대표 상품, 배송 상태, 마지막 위치
-  const lines = myOrders.map((order) => {
-    const items = getOrderItems(order.id);
-    const title =
-      items.length > 1 ? `${items[0].productName} 외 ${items.length - 1}건` : items[0]?.productName;
-
-    const shipment = shipments.find((s) => s.orderId === order.id);
-    if (!shipment) {
-      return `- 주문 ${order.id}번 (${title}): ${orderStatusLabel[order.status]}`;
-    }
-
-    const events = shipmentEvents.filter((e) => e.shipmentId === shipment.id);
-    const lastEvent = events[events.length - 1];
-    const where = lastEvent ? ` · ${lastEvent.location}` : "";
-    return `- 주문 ${order.id}번 (${title}): ${shipmentStatusLabel[shipment.status]}${where}`;
-  });
-
-  return {
-    reply: `${user.name}님의 배송 현황이에요.\n${lines.join("\n")}\n\n자세한 이력은 '배송조회' 메뉴에서 확인하실 수 있어요.`,
-  };
+  return post<AiChatResponse>("/api/assistant/chat", request);
 }
 
-// ───────── 관리자 ─────────
-// 관리자 함수는 모두 관리자로 로그인했을 때만 동작한다 (백엔드에서도 권한을 확인할 부분)
+// ───────── 관리자 (/api/admin/**, 관리자만. 일반 회원이면 403) ─────────
 
-// 재고가 LOW_STOCK_THRESHOLD(lib/stock.ts) 보다 적으면 "재고 부족"
-// 주문 후 이 일수가 지나도 배송 완료가 아니면 "지연 배송"
-const DELAY_DAYS = 3;
-
-function requireAdmin(): User {
-  const user = requireLogin();
-  if (user.role !== "ADMIN") throw new Error("관리자만 사용할 수 있습니다.");
-  return user;
-}
-
-function isDelayed(shipment: Shipment): boolean {
-  if (shipment.status === "DELIVERED") return false;
-  const order = orders.find((o) => o.id === shipment.orderId);
-  if (!order || order.status === "CANCELLED") return false;
-  const days = (Date.now() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-  return days > DELAY_DAYS;
-}
-
-function toAdminShipment(shipment: Shipment): AdminShipment {
-  const order = orders.find((o) => o.id === shipment.orderId)!;
-  const warehouse = warehouses.find((w) => w.id === shipment.warehouseId);
-  const events = shipmentEvents
-    .filter((e) => e.shipmentId === shipment.id)
-    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
-
-  return {
-    ...shipment,
-    warehouseName: warehouse ? warehouse.name : "",
-    orderStatus: order.status,
-    receiverName: order.receiverName,
-    address: order.address,
-    lastEvent: events[events.length - 1] ?? null,
-    delayed: isDelayed(shipment),
-  };
-}
-
-// 나중에: GET /api/admin/dashboard
+// GET /api/admin/dashboard
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-  await delay();
-  requireAdmin();
-
-  // 최근 7일 (오늘 포함) 날짜별 주문 수
-  const dailyOrders: DailyOrderCount[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const day = new Date();
-    day.setDate(day.getDate() - i);
-    const key = toDateKey(day);
-    const count = orders.filter((o) => toDateKey(new Date(o.createdAt)) === key).length;
-    dailyOrders.push({ date: key, count });
-  }
-
-  // 재고 부족 건수는 백엔드 재고 목록으로 센다. 서버에 연결할 수 없으면 null (화면에서 안내 문구 표시)
-  let lowStockCount: number | null = null;
-  try {
-    const inventories = await getInventories();
-    lowStockCount = inventories.filter((row) => row.quantity < LOW_STOCK_THRESHOLD).length;
-  } catch {
-    lowStockCount = null;
-  }
-
-  return {
-    totalOrders: orders.length,
-    shippingCount: shipments.filter((s) => s.status === "SHIPPED" || s.status === "IN_TRANSIT").length,
-    lowStockCount,
-    delayedCount: shipments.filter(isDelayed).length,
-    dailyOrders,
-  };
+  return get<DashboardSummary>("/api/admin/dashboard");
 }
 
-// 나중에: GET /api/admin/orders?status=...
-// status 를 주지 않으면 전체 주문
-export async function getAdminOrders(status?: OrderStatus): Promise<AdminOrder[]> {
-  await delay();
-  requireAdmin();
-
-  return orders
-    .filter((order) => !status || order.status === status)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map((order) => ({
-      ...order,
-      userName: users.find((u) => u.id === order.userId)?.name ?? "(탈퇴 회원)",
-      items: getOrderItems(order.id),
-      shipment: shipments.find((s) => s.orderId === order.id) ?? null,
-    }));
+// GET /api/admin/analytics
+export async function getAnalytics(): Promise<Analytics> {
+  return get<Analytics>("/api/admin/analytics");
 }
 
-// 관리자가 주문 화면에서 바꿀 수 있는 상태 (현재 상태 → 바꿀 수 있는 상태들)
-// 배송중/배송 완료는 배송 관리 화면에서 배송 상태를 바꾸면 자동으로 따라 바뀐다
-export const orderStatusChanges: Record<OrderStatus, OrderStatus[]> = {
-  PAID: ["PREPARING", "CANCELLED"],
-  PREPARING: ["CANCELLED"],
-  SHIPPING: [],
-  DELIVERED: [],
-  CANCELLED: [],
-};
+// GET /api/admin/orders?status=&page= (최신 주문이 위로, 20개씩)
+export async function getAdminOrders(status: OrderStatus | undefined, page: number): Promise<Page<Order>> {
+  const query = status ? `status=${status}&page=${page}` : `page=${page}`;
+  return get<Page<Order>>(`/api/admin/orders?${query}`);
+}
 
-// 나중에: PATCH /api/admin/orders/{id}/status
+// PATCH /api/admin/orders/{id}/status
+// 포장 → 출고 → 배송중 → 배송완료, 회수중 → 회수완료 (배송 상태·재고·이력은 백엔드가 함께 바꾼다)
 export async function updateOrderStatus(orderId: number, status: OrderStatus): Promise<Order> {
-  await delay();
-  requireAdmin();
-
-  const order = orders.find((o) => o.id === orderId);
-  if (!order) throw new Error("주문을 찾을 수 없습니다.");
-  if (!orderStatusChanges[order.status].includes(status)) {
-    throw new Error(
-      `'${orderStatusLabel[order.status]}' 상태에서는 '${orderStatusLabel[status]}'(으)로 바꿀 수 없습니다.`
-    );
-  }
-
-  order.status = status;
-  return order;
+  return patch<Order>(`/api/admin/orders/${orderId}/status`, { status });
 }
 
-// [백엔드 연결됨] GET /api/products + GET /api/warehouses + GET /api/inventories 를 합쳐서 표를 만든다
-// 서버에 연결할 수 없으면 Error 를 던진다
-export async function getInventoryTable(): Promise<InventoryTable> {
-  requireAdmin();
+// GET /api/admin/shipments?status=&page=
+export async function getAdminShipments(
+  status: ShipmentStatus | undefined,
+  page: number
+): Promise<Page<AdminShipment>> {
+  const query = status ? `status=${status}&page=${page}` : `page=${page}`;
+  return get<Page<AdminShipment>>(`/api/admin/shipments?${query}`);
+}
 
+// GET /api/admin/users?page=
+export async function getAdminUsers(page: number): Promise<Page<AdminUser>> {
+  return get<Page<AdminUser>>(`/api/admin/users?page=${page}`);
+}
+
+// GET /api/admin/products
+export async function getAdminProducts(): Promise<ProductResponse[]> {
+  return get<ProductResponse[]>("/api/admin/products");
+}
+
+// POST /api/admin/products
+export async function createProduct(request: ProductRequest): Promise<ProductResponse> {
+  return post<ProductResponse>("/api/admin/products", request);
+}
+
+// PUT /api/admin/products/{id}
+export async function updateProduct(productId: number, request: ProductRequest): Promise<ProductResponse> {
+  return put<ProductResponse>(`/api/admin/products/${productId}`, request);
+}
+
+// DELETE /api/admin/products/{id} (주문된 적 있는 상품이면 409 "주문 이력이 있는 상품은 삭제할 수 없습니다.")
+export async function deleteProduct(productId: number): Promise<void> {
+  await del<void>(`/api/admin/products/${productId}`);
+}
+
+// GET /api/admin/products + /api/admin/warehouses + /api/admin/inventories 를 합쳐서 재고 표를 만든다
+export async function getInventoryTable(): Promise<InventoryTable> {
   const [productList, warehouseList, inventories] = await Promise.all([
-    apiGet<ProductResponse[]>("/api/products"),
-    getWarehouses(),
-    getInventories(),
+    getAdminProducts(),
+    get<Warehouse[]>("/api/admin/warehouses"),
+    get<InventoryResponse[]>("/api/admin/inventories"),
   ]);
 
   const rows: InventoryRow[] = productList.map((product) => {
     const cells: InventoryCell[] = warehouseList.map((warehouse) => {
-      const row = inventories.find(
-        (r) => r.productId === product.id && r.warehouseId === warehouse.id
-      );
+      const row = inventories.find((r) => r.productId === product.id && r.warehouseId === warehouse.id);
       // 이 물류센터에서 취급하지 않는 상품
-      if (!row) return { warehouseId: warehouse.id, quantity: null, lowStock: false };
-
+      if (!row) {
+        return { warehouseId: warehouse.id, quantity: null, reservedQuantity: 0, availableQuantity: 0, lowStock: false };
+      }
+      const available = getAvailableQuantity(row.quantity, row.reservedQuantity);
       return {
         warehouseId: warehouse.id,
         quantity: row.quantity,
-        lowStock: row.quantity < LOW_STOCK_THRESHOLD,
+        reservedQuantity: row.reservedQuantity,
+        availableQuantity: available,
+        lowStock: available < LOW_STOCK_THRESHOLD,
       };
     });
 
@@ -873,79 +537,9 @@ export async function getInventoryTable(): Promise<InventoryTable> {
       productName: product.name,
       categoryName: product.categoryName,
       cells,
-      totalQuantity: cells.reduce((sum, cell) => sum + (cell.quantity ?? 0), 0),
+      totalAvailable: cells.reduce((sum, cell) => sum + cell.availableQuantity, 0),
     };
   });
 
   return { warehouses: warehouseList, rows, lowStockThreshold: LOW_STOCK_THRESHOLD };
-}
-
-// 나중에: GET /api/admin/shipments?status=...
-export async function getAdminShipments(status?: ShipmentStatus): Promise<AdminShipment[]> {
-  await delay();
-  requireAdmin();
-
-  return shipments
-    .filter((s) => !status || s.status === status)
-    .sort((a, b) => b.id - a.id)
-    .map(toAdminShipment);
-}
-
-// 배송 상태의 다음 단계 (이미 마지막 단계면 null)
-export function getNextShipmentStatus(status: ShipmentStatus): ShipmentStatus | null {
-  const index = shipmentSteps.indexOf(status);
-  return shipmentSteps[index + 1] ?? null;
-}
-
-// 나중에: PATCH /api/admin/shipments/{id}/status
-// 배송 상태를 한 단계 진행하고, 배송 이력을 남기고, 주문 상태도 함께 바꾼다
-export async function updateShipmentStatus(
-  shipmentId: number,
-  status: ShipmentStatus
-): Promise<AdminShipment> {
-  await delay();
-  requireAdmin();
-
-  const shipment = shipments.find((s) => s.id === shipmentId);
-  if (!shipment) throw new Error("배송 정보를 찾을 수 없습니다.");
-  const order = orders.find((o) => o.id === shipment.orderId)!;
-  if (order.status === "CANCELLED") {
-    throw new Error("취소된 주문은 배송 상태를 바꿀 수 없습니다.");
-  }
-  if (getNextShipmentStatus(shipment.status) !== status) {
-    throw new Error("배송 상태는 한 단계씩만 진행할 수 있습니다.");
-  }
-
-  const now = new Date().toISOString();
-  const warehouse = warehouses.find((w) => w.id === shipment.warehouseId);
-  let location = "";
-  let description = "";
-
-  if (status === "SHIPPED") {
-    shipment.shippedAt = now;
-    shipment.trackingNumber = String(500000000000 + shipment.id); // 가짜 운송장 번호
-    order.status = "SHIPPING";
-    location = warehouse ? warehouse.name : "";
-    description = "상품이 출고되었습니다.";
-  } else if (status === "IN_TRANSIT") {
-    location = "허브터미널";
-    description = "간선 이동 중입니다.";
-  } else if (status === "DELIVERED") {
-    shipment.deliveredAt = now;
-    order.status = "DELIVERED";
-    location = order.address;
-    description = "배송이 완료되었습니다.";
-  }
-  shipment.status = status;
-
-  shipmentEvents.push({
-    id: nextId(shipmentEvents),
-    shipmentId: shipment.id,
-    status,
-    location,
-    description,
-    occurredAt: now,
-  });
-
-  return toAdminShipment(shipment);
 }

@@ -8,6 +8,8 @@ public record OrderItemResponse(
         Long orderId,
         Long productId,
         String productName,
+        String imageUrl,     // 상품의 현재 이미지 (없으면 null)
+        String categoryName, // 이미지가 없을 때 카테고리별 그림용
         Long warehouseId,
         String warehouseName,
         int quantity,
@@ -21,6 +23,8 @@ public record OrderItemResponse(
                 item.getOrder().getId(),
                 item.getProduct().getId(),
                 item.getProduct().getName(),
+                item.getProduct().getImageUrl(),
+                item.getProduct().getCategory().getName(),
                 item.getWarehouse().getId(),
                 item.getWarehouse().getName(),
                 item.getQuantity(),

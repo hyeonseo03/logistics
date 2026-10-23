@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateMyProfile } from "@/lib/api";
+import { changePassword, updateMyProfile } from "@/lib/api";
 import { PASSWORD_MIN_LENGTH, isValidName, isValidPassword, isValidPhone } from "@/lib/validation";
 import type { User } from "@/types/user";
 
@@ -9,6 +9,7 @@ import type { User } from "@/types/user";
 interface FormErrors {
   name: string;
   phone: string;
+  currentPassword: string;
   newPassword: string;
   confirmPassword: string;
 }
@@ -25,22 +26,32 @@ export default function ProfileEditForm({
 }) {
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const [errors, setErrors] = useState<FormErrors>({ name: "", phone: "", newPassword: "", confirmPassword: "" });
+  const [errors, setErrors] = useState<FormErrors>({
+    name: "",
+    phone: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
   const [serverError, setServerError] = useState(""); // 저장 요청이 실패했을 때
   const [saving, setSaving] = useState(false);
 
   // 입력값 검사. 문제가 있는 칸마다 메시지를 채운다
   function validate(): FormErrors {
-    const result: FormErrors = { name: "", phone: "", newPassword: "", confirmPassword: "" };
+    const result: FormErrors = { name: "", phone: "", currentPassword: "", newPassword: "", confirmPassword: "" };
 
     if (!isValidName(name)) result.name = "이름을 1~20자로 입력해 주세요.";
     if (!isValidPhone(phone)) result.phone = "010-1234-5678 형식으로 입력해 주세요.";
 
     // 비밀번호는 입력했을 때만 검사 (비워두면 변경하지 않음)
     if (newPassword || confirmPassword) {
+      if (!currentPassword) {
+        result.currentPassword = "비밀번호를 바꾸려면 현재 비밀번호를 입력해 주세요.";
+      }
       if (!isValidPassword(newPassword)) {
         result.newPassword = `비밀번호는 ${PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`;
       }
@@ -62,11 +73,11 @@ export default function ProfileEditForm({
     setSaving(true);
     setServerError("");
     try {
-      await updateMyProfile({
-        name,
-        phone,
-        newPassword: newPassword ? newPassword : undefined,
-      });
+      // 비밀번호를 먼저 바꾼다 (현재 비밀번호가 틀리면 여기서 멈춰서 이름·전화번호도 바뀌지 않는다)
+      if (newPassword) {
+        await changePassword({ currentPassword, newPassword });
+      }
+      await updateMyProfile({ name: name.trim(), phone });
       onSaved();
     } catch (err) {
       setServerError(err instanceof Error ? err.message : "저장에 실패했습니다.");
@@ -91,6 +102,17 @@ export default function ProfileEditForm({
           onChange={(e) => setPhone(e.target.value)}
           placeholder="010-1234-5678"
           inputMode="tel"
+          className="rounded border px-3 py-2"
+        />
+      </Field>
+
+      <Field label="현재 비밀번호" error={errors.currentPassword}>
+        <input
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="비밀번호를 바꿀 때만 입력하세요"
+          autoComplete="current-password"
           className="rounded border px-3 py-2"
         />
       </Field>

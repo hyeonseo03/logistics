@@ -13,10 +13,10 @@ export const myPageSections = [
     ],
   },
   {
-    title: "취소·반품·교환",
+    title: "취소·반품",
     menus: [
       { href: "/mypage/cancellations", label: "취소 내역" },
-      { href: "/mypage/returns", label: "반품/교환 내역" },
+      { href: "/mypage/returns", label: "반품(회수) 내역" },
     ],
   },
   {

@@ -43,6 +43,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("select o.createdAt from Order o where o.createdAt >= :from")
     List<LocalDateTime> findCreatedAtSince(LocalDateTime from);
 
+    // 통계용: 기준 시각 이후의 주문
+    List<Order> findAllByCreatedAtGreaterThanEqual(LocalDateTime from);
+
     // 지연 주문: 진행 중인데 기준 시각보다 먼저 주문된 것
     long countByStatusInAndCreatedAtBefore(Collection<OrderStatus> statuses, LocalDateTime before);
 

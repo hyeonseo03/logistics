@@ -1,8 +1,12 @@
-// 입력값 검사 규칙
-// 화면(입력 폼)과 lib/api.ts(서버 역할) 양쪽에서 같이 쓴다.
-// 나중에 백엔드에서도 같은 규칙으로 한 번 더 검사해야 한다. (화면 검사는 우회할 수 있으므로)
+// 입력값 검사 규칙 (화면의 입력 폼에서 쓴다)
+// 백엔드도 같은 규칙으로 한 번 더 검사한다. (화면 검사는 우회할 수 있으므로)
 
 export const PASSWORD_MIN_LENGTH = 8;
+
+// 이메일: "아이디@도메인.최상위" 모양인지만 간단히 본다
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
 
 // 휴대폰 번호 형식: 010-1234-5678 (가운데는 3~4자리)
 export function isValidPhone(phone: string): boolean {

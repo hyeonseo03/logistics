@@ -2,6 +2,45 @@
 
 화면별로 필요한 데이터와 API를 정리한다. 백엔드(Spring Boot)를 만들 때 이 문서를 기준으로 한다.
 
+> **2026-10-23 기준: 모든 화면이 실제 백엔드 API 에 연결되었다. (`mocks/` 삭제)**
+> 실제 요청·응답 모양은 `../docs/API.md` 가 기준이다. 아래 "화면별 연결 현황" 다음의 섹션들은 백엔드를 만들기 전에 쓴 초기 설계 기록이다.
+
+## 화면별 연결 현황
+
+| 화면 | 필요한 데이터 | 사용하는 API |
+|---|---|---|
+| 홈 `/` | 오늘 출고 가능 상품, 품절 임박 상품 | `GET /api/products`, `/api/inventories`, `/api/warehouses` |
+| 상품 목록·상세 | 상품 + 재고 + 예상 도착일 | `GET /api/products`, `/api/products/{id}`, `/api/products/{id}/inventories`, `/api/categories` |
+| 재입고 알림 신청 (상세) | 품절 상품 알림 | `POST /api/products/{id}/restock-alerts` **(신규)** |
+| 로그인 `/login?redirect=` | 이메일·비밀번호 → JWT | `POST /api/auth/login`, `GET /api/auth/me` |
+| 회원가입 `/signup?redirect=` | 이메일, 비밀번호, 이름, 전화번호 | `POST /api/auth/signup` (중복 이메일 409 `DUPLICATE_EMAIL`) → 자동 로그인 |
+| 장바구니 `/cart` | 서버 장바구니 + 결제 요약 | `GET /api/cart`, `PATCH /api/cart/items/{productId}`, `DELETE /api/cart/items?productIds=` |
+| 주문/결제 `/checkout` | 저장된 배송지, 선택한 상품 | `GET /api/users/me/addresses`, `POST /api/orders` (`productIds` 로 일부만 주문) |
+| 주문 목록 `/mypage/orders` | 주문 + 취소 가능 여부(`cancelInfo`) | `GET /api/orders`, `POST /api/orders/{id}/cancel` |
+| 배송 조회 `/tracking/{주문번호}` | 타임라인, 도착 예상 시각 | `GET /api/orders/{id}/tracking` |
+| 마이페이지 요약 | 배송중·회수중 수, 알림 수 | `GET /api/orders` + `GET /api/users/me/restock-alerts` 로 계산 |
+| 취소 내역 / 반품(회수) 내역 | 취소·회수 사유, 신청·완료 시각, 주문 | `GET /api/users/me/claims?type=CANCEL\|RETURN` **(신규)** |
+| 재입고 알림 목록 | 알림 + 상품 현재 재고 | `GET`, `DELETE /api/users/me/restock-alerts` **(신규)** |
+| 내 정보 관리 | 비밀번호 확인 → 수정 | `POST /api/users/me/verify-password`, `PUT /api/users/me`, `PATCH /api/users/me/password` |
+| 배송지 관리 | 배송지 CRUD | `/api/users/me/addresses` 묶음 |
+| AI 도우미 `/ai` | 질문 → 답변(+상품 검색 결과) | `POST /api/assistant/chat` |
+| 관리자 대시보드 | 오늘 주문·매출, 상태별 주문, 품절 임박 | `GET /api/admin/dashboard` |
+| 관리자 상품 관리 | 상품 CRUD | `GET/POST/PUT/DELETE /api/admin/products` |
+| 관리자 재고 관리 | 센터별 현재·예약·판매가능 재고 | `GET /api/admin/inventories`, `/api/admin/warehouses`, `/api/admin/products` |
+| 관리자 주문 관리 | 상태 필터, 페이지, 다음 단계 버튼 | `GET /api/admin/orders`, `PATCH /api/admin/orders/{id}/status` |
+| 관리자 배송 관리 | 배송 상태, 예상 도착, 지연 | `GET /api/admin/shipments` + 주문 상태 변경 API |
+| 관리자 회원 관리 | 회원 목록 + 주문 수 | `GET /api/admin/users` |
+| 관리자 통계 분석 | 14일 매출, 카테고리별 매출, 인기 상품, 센터별 출고, 취소·회수율 | `GET /api/admin/analytics` **(신규)** |
+
+### 백엔드와 맞추면서 바뀐 점
+- 주문 상태는 백엔드 8단계(`ORDERED`~`RETURNED`), 권한은 `USER`/`ADMIN` 을 그대로 쓴다.
+- "교환"은 백엔드에 없는 기능이라 "반품(회수) 내역"만 남겼다. 따로 `order_claims` 테이블을 만들지 않고 `payments`(환불 사유)와 `returns`(회수) 테이블에서 만든다.
+- 배송 조회 주소의 번호는 배송 번호가 아니라 **주문 번호**다.
+- 장바구니는 브라우저 메모리가 아니라 서버(`cart_items`)에 저장된다. "결제할 상품 체크"만 화면에서 기억한다.
+- 남은 임시 처리: 상품 검색어·정렬, 출고 센터·예상 도착일 계산은 아직 프론트(`lib/api.ts`, `lib/stock.ts`)에서 한다.
+
+---
+
 ---
 
 ## 상품 목록 / 상품 상세 — 재고 · 출고 정보

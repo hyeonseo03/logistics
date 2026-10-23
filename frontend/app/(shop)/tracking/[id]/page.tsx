@@ -1,6 +1,7 @@
 import ShipmentTracking from "@/components/shipment/ShipmentTracking";
 
-// 주소의 [id] 값(배송 번호)은 params 로 들어온다 (Next.js 16 에서는 await 해서 꺼낸다)
+// 배송 조회. 주소의 [id] 는 주문 번호다 (백엔드 GET /api/orders/{id}/tracking)
+// (Next.js 16 에서는 params 를 await 해서 꺼낸다)
 export default async function TrackingPage({
   params,
 }: {
@@ -8,5 +9,5 @@ export default async function TrackingPage({
 }) {
   const { id } = await params;
 
-  return <ShipmentTracking key={id} shipmentId={Number(id)} />;
+  return <ShipmentTracking key={id} orderId={Number(id)} />;
 }

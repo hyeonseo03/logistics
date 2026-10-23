@@ -6,11 +6,11 @@ import ProductImage from "@/components/product/ProductImage";
 import StockBadge from "@/components/product/StockBadge";
 import { deleteRestockAlert, getMyRestockAlerts } from "@/lib/api";
 import { formatDateTime, formatPrice } from "@/lib/format";
-import type { RestockAlertWithProduct } from "@/types/product";
+import type { RestockAlert } from "@/types/product";
 
 // 재입고 알림 신청 목록 + 알림 해제
 export default function RestockAlertList() {
-  const [alerts, setAlerts] = useState<RestockAlertWithProduct[]>([]);
+  const [alerts, setAlerts] = useState<RestockAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<number | null>(null); // 해제 중인 알림
   const [error, setError] = useState("");
@@ -45,7 +45,7 @@ export default function RestockAlertList() {
   if (loadError) {
     return (
       <p className="rounded border border-red-200 bg-red-50 p-4 text-red-700">
-        재고 정보를 불러올 수 없습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.
+        재입고 알림 목록을 불러올 수 없습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.
       </p>
     );
   }
@@ -70,7 +70,12 @@ export default function RestockAlertList() {
           return (
             <li key={alert.id} className="flex items-center gap-4 p-4">
               <Link href={`/products/${product.id}`} className="w-16 shrink-0">
-                <ProductImage imageUrl={product.imageUrl} name={product.name} textSize="text-[10px]" />
+                <ProductImage
+                  imageUrl={product.imageUrl}
+                  name={product.name}
+                  categoryName={product.categoryName}
+                  size="small"
+                />
               </Link>
 
               <div className="min-w-0 flex-1">

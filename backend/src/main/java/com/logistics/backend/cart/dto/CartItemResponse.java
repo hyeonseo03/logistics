@@ -10,6 +10,7 @@ public record CartItemResponse(
         String productName,
         String optionName,
         String imageUrl,
+        String categoryName, // 이미지가 없을 때 카테고리별 그림을 보여주기 위해
         int price,         // 상품 1개 가격 (현재 가격)
         int quantity,
         int lineTotal,     // price × quantity
@@ -25,6 +26,7 @@ public record CartItemResponse(
                 product.getName(),
                 product.getOptionName(),
                 product.getImageUrl(),
+                product.getCategory().getName(),
                 product.getPrice(),
                 item.getQuantity(),
                 product.getPrice() * item.getQuantity(),
