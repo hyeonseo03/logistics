@@ -21,5 +21,5 @@
 - [x] 4단계: 되돌리기 (상태 전이, 취소/회수, 배송지 변경, 멱등·낙관적 락)
 - [x] 5단계: 배송 조회 + 도착 예상 시각 (EtaService)
 - [x] 6단계: 관리자 API
-- [ ] 7단계: AI 도우미 (AssistantService)
+- [x] 7단계: AI 도우미 (AssistantService)
 - [ ] 8단계: 테스트·마무리 (동시성/되돌리기 테스트, 샘플 데이터, API.md, ERD.md)

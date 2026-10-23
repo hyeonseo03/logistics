@@ -51,7 +51,7 @@ public class SecurityConfig {
                                 "/api/warehouses", "/api/warehouses/**",
                                 "/api/inventories").permitAll()
                         // 누구나: AI 도우미 (로그인했으면 내 주문 정보까지 답한다)
-                        .requestMatchers("/api/assistant/**").permitAll()
+                        .requestMatchers("/api/assistant/**", "/api/ai/**").permitAll()
                         // 관리자만
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 그 밖의 모든 API (장바구니, 주문, 마이페이지 등)는 로그인 필요
